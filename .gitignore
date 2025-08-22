@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python/Django
+college_fee_backend/env/
+college_fee_backend/db.sqlite3
+college_fee_backend/**/__pycache__/
+*.pyc
+
+# Bun
+bun.lockb
+.env
