@@ -1,0 +1,6 @@
+django>=3.1
+djangorestframework
+djangorestframework-simplejwt
+python-dotenv
+stripe
+xhtml2pdf

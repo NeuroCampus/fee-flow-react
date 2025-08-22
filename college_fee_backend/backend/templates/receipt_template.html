@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment Receipt</title>
+    <style>
+        body { font-family: 'Helvetica Neue', 'Helvetica', Helvetica, Arial, sans-serif; font-size: 14px; color: #333; }
+        .container { width: 80%; margin: auto; padding: 20px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, .15); }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 { color: #333; font-size: 24px; margin-bottom: 5px; }
+        .header p { color: #777; font-size: 12px; }
+        .details table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .details table td, .details table th { border: 1px solid #eee; padding: 8px; text-align: left; }
+        .details table th { background-color: #f2f2f2; }
+        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #777; }
+        .logo { max-width: 100px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="https://via.placeholder.com/100x50?text=College+Logo" alt="College Logo" class="logo">
+            <h1>Payment Receipt</h1>
+            <p><strong>College Name</strong><br>123 College Road, University City, 12345</p>
+        </div>
+
+        <div class="details">
+            <table>
+                <tr>
+                    <th>Receipt ID:</th>
+                    <td>{{ payment.id }}</td>
+                </tr>
+                <tr>
+                    <th>Date:</th>
+                    <td>{{ payment.timestamp|date:"F d, Y" }}</td>
+                </tr>
+                <tr>
+                    <th>Student Name:</th>
+                    <td>{{ student.name }}</td>
+                </tr>
+                <tr>
+                    <th>USN:</th>
+                    <td>{{ student.usn }}</td>
+                </tr>
+                <tr>
+                    <th>Department:</th>
+                    <td>{{ student.dept }}</td>
+                </tr>
+                <tr>
+                    <th>Semester:</th>
+                    <td>{{ student.semester }}</td>
+                </tr>
+                <tr>
+                    <th>Invoice ID:</th>
+                    <td>{{ invoice.id }}</td>
+                </tr>
+                <tr>
+                    <th>Payment Mode:</th>
+                    <td>{{ payment.get_mode_display }}</td>
+                </tr>
+                <tr>
+                    <th>Transaction ID:</th>
+                    <td>{{ payment.transaction_id }}</td>
+                </tr>
+                <tr>
+                    <th>Amount Paid:</th>
+                    <td>₹{{ payment.amount }}</td>
+                </tr>
+                <tr>
+                    <th>Status:</th>
+                    <td>{{ payment.get_status_display }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="footer">
+            <p>Thank you for your payment.</p>
+            <p>&copy; {{ current_year }} College Name. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
