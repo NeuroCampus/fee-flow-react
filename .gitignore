@@ -32,3 +32,43 @@ college_fee_backend/**/__pycache__/
 # Bun
 bun.lockb
 .env
+
+
+#sha
+# Additional Python/Django
+*.pyo
+*.pyd
+*.sqlite3-*
+media/
+staticfiles/
+venv/
+.venv/
+*.cache
+django.log
+
+# Additional frontend
+.tsbuildinfo
+coverage/
+
+# Additional environment variables
+.env.local
+.env.development
+.env.production
+.env.*
+secrets/
+
+# Sensitive files
+*.key
+*.pem
+*.crt
+
+# Additional editor and OS files
+.history/
+Thumbs.db
+*.bak
+*.tmp
+*.temp
+
+# Optional: Lockfiles (uncomment if you want to exclude)
+# package-lock.json
+# yarn.lock
