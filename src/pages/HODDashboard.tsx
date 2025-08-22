@@ -1,237 +1,162 @@
 
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { 
   GraduationCap, 
-  Users, 
-  IndianRupee, 
-  TrendingUp,
+  LogOut,
   Download,
-  Eye
+  Users,
+  IndianRupee,
+  TrendingUp
 } from 'lucide-react';
 
 const HODDashboard = () => {
-  const { user } = useAuth();
-
-  // Mock data - replace with actual API calls
-  const departmentStats = {
-    totalStudents: 120,
-    totalDue: 1800000,
-    totalPaid: 1200000,
-    totalBalance: 600000,
-    collectionPercentage: 67
-  };
-
-  const students = [
-    { id: '1', usn: 'CS20001', name: 'John Doe', semester: 6, totalDue: 32000, paid: 32000, balance: 0, status: 'paid' },
-    { id: '2', usn: 'CS20002', name: 'Jane Smith', semester: 6, totalDue: 32000, paid: 17000, balance: 15000, status: 'partial' },
-    { id: '3', usn: 'CS20003', name: 'Bob Johnson', semester: 6, totalDue: 32000, paid: 0, balance: 32000, status: 'pending' },
-  ];
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid': return 'status-paid';
-      case 'partial': return 'status-pending';
-      case 'pending': return 'status-overdue';
-      default: return 'status-pending';
-    }
-  };
+  const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-hod rounded-full flex items-center justify-center">
-                <GraduationCap className="w-5 h-5 text-hod-foreground" />
+      <header className="bg-card border-b">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                <GraduationCap className="h-6 w-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-foreground">HOD Dashboard</h1>
-                <p className="text-sm text-muted-foreground">
-                  {user?.department} Department Overview
-                </p>
+                <h1 className="text-xl font-semibold text-foreground">HOD Portal</h1>
+                <p className="text-sm text-muted-foreground">{user?.department} Department</p>
               </div>
             </div>
-            <Button variant="outline" onClick={() => window.location.href = '/logout'}>
-              Logout
+            <Button variant="outline" onClick={logout} className="flex items-center gap-2">
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="stat-card">
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        {/* Department Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
-                <Users className="w-4 h-4 mr-2" />
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Users className="h-4 w-4" />
                 Total Students
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <span className="text-3xl font-bold text-primary">
-                {departmentStats.totalStudents}
-              </span>
+              <div className="text-2xl font-bold">348</div>
+              <p className="text-xs text-muted-foreground">Active students in department</p>
             </CardContent>
           </Card>
-
-          <Card className="stat-card bg-gradient-to-r from-success/10 to-success/5">
+          
+          <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
-                <IndianRupee className="w-4 h-4 mr-2" />
-                Total Collected
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <IndianRupee className="h-4 w-4" />
+                Total Collection
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <span className="text-3xl font-bold text-success">
-                ₹{(departmentStats.totalPaid / 100000).toFixed(1)}L
-              </span>
+              <div className="text-2xl font-bold text-green-600">₹87.5L</div>
+              <p className="text-xs text-muted-foreground">This academic year</p>
             </CardContent>
           </Card>
-
-          <Card className="stat-card bg-gradient-to-r from-warning/10 to-warning/5">
+          
+          <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
-                <IndianRupee className="w-4 h-4 mr-2" />
-                Outstanding
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Collection Rate
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <span className="text-3xl font-bold text-warning">
-                ₹{(departmentStats.totalBalance / 100000).toFixed(1)}L
-              </span>
-            </CardContent>
-          </Card>
-
-          <Card className="stat-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
-                <TrendingUp className="w-4 h-4 mr-2" />
-                Collection %
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <span className="text-3xl font-bold text-primary">
-                {departmentStats.collectionPercentage}%
-              </span>
+              <div className="text-2xl font-bold text-blue-600">94.2%</div>
+              <p className="text-xs text-muted-foreground">Above target of 90%</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Department Students */}
-        <Card className="mb-8">
+        <Card>
           <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Department Students Overview</CardTitle>
-                <CardDescription>Fee collection status for all students</CardDescription>
+                <CardTitle>Department Students</CardTitle>
+                <CardDescription>Fee collection status by semester</CardDescription>
               </div>
-              <Button variant="outline" className="role-hod">
-                <Download className="w-4 h-4 mr-2" />
+              <Button variant="outline" className="flex items-center gap-2">
+                <Download className="h-4 w-4" />
                 Export Report
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr className="table-header">
-                    <th className="table-cell text-left">USN</th>
-                    <th className="table-cell text-left">Name</th>
-                    <th className="table-cell text-left">Semester</th>
-                    <th className="table-cell text-left">Total Due</th>
-                    <th className="table-cell text-left">Paid</th>
-                    <th className="table-cell text-left">Balance</th>
-                    <th className="table-cell text-left">Status</th>
-                    <th className="table-cell text-left">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((student) => (
-                    <tr key={student.id} className="hover:bg-muted/50">
-                      <td className="table-cell font-medium">{student.usn}</td>
-                      <td className="table-cell">{student.name}</td>
-                      <td className="table-cell">{student.semester}</td>
-                      <td className="table-cell">₹{student.totalDue.toLocaleString()}</td>
-                      <td className="table-cell text-success">₹{student.paid.toLocaleString()}</td>
-                      <td className="table-cell">
-                        <span className={student.balance > 0 ? 'text-warning' : 'text-success'}>
-                          ₹{student.balance.toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="table-cell">
-                        <Badge className={getStatusColor(student.status)}>
-                          {student.status}
-                        </Badge>
-                      </td>
-                      <td className="table-cell">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-4">
+              {/* Mock Semester Data */}
+              {[
+                { semester: 8, students: 45, collected: 98, pending: 2, amount: '11.2L' },
+                { semester: 6, students: 52, collected: 92, pending: 8, amount: '13.0L' },
+                { semester: 4, students: 58, collected: 89, pending: 11, amount: '14.5L' },
+                { semester: 2, students: 63, collected: 95, pending: 5, amount: '15.8L' },
+              ].map((sem) => (
+                <div key={sem.semester} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-medium">Semester {sem.semester}</h3>
+                    <span className="text-sm font-medium text-green-600">₹{sem.amount}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Total Students</p>
+                      <p className="font-medium">{sem.students}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Fees Collected</p>
+                      <p className="font-medium text-green-600">{sem.collected}%</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Pending</p>
+                      <p className="font-medium text-orange-600">{sem.pending}%</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Collection</p>
+                      <p className="font-medium">₹{sem.amount}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-3">
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div 
+                        className="bg-green-600 h-2 rounded-full" 
+                        style={{ width: `${sem.collected}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Collection Summary</CardTitle>
-              <CardDescription>Monthly collection trends</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Current Month</span>
-                  <span className="font-semibold text-success">₹4.2L</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Previous Month</span>
-                  <span className="font-semibold">₹3.8L</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Growth</span>
-                  <span className="font-semibold text-success">+10.5%</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Outstanding Analysis</CardTitle>
-              <CardDescription>Students with pending payments</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Fully Paid</span>
-                  <span className="font-semibold text-success">80 students</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Partial Payment</span>
-                  <span className="font-semibold text-warning">25 students</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">No Payment</span>
-                  <span className="font-semibold text-destructive">15 students</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Outstanding Reports */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Outstanding Amounts</CardTitle>
+            <CardDescription>Students with pending fee payments</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 space-y-4">
+              <div className="text-2xl font-bold text-orange-600">₹4.8L</div>
+              <p className="text-muted-foreground">Total outstanding amount</p>
+              <Button variant="outline">View Detailed Report</Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
