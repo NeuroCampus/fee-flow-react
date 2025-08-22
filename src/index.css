@@ -3,12 +3,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design System - All colors, gradients, fonts, etc defined here */
+/* Enhanced Design System - Better visibility and contrast */
 
 @layer base {
   :root {
-    /* Base Colors */
-    --background: 248 250 252;
+    /* Base Colors - Improved contrast */
+    --background: 250 250 251;
     --foreground: 15 23 42;
 
     --card: 255 255 255;
@@ -17,93 +17,93 @@
     --popover: 255 255 255;
     --popover-foreground: 15 23 42;
 
-    /* Primary - Professional Blue */
-    --primary: 219 234 254;
-    --primary-foreground: 30 58 138;
+    /* Primary - Deep Blue for better contrast */
+    --primary: 37 99 235;
+    --primary-foreground: 255 255 255;
 
-    /* Secondary - Light Gray */
+    /* Secondary - Neutral Gray */
     --secondary: 241 245 249;
-    --secondary-foreground: 51 65 85;
+    --secondary-foreground: 15 23 42;
 
     --muted: 248 250 252;
-    --muted-foreground: 100 116 139;
+    --muted-foreground: 71 85 105;
 
-    --accent: 241 245 249;
-    --accent-foreground: 51 65 85;
+    --accent: 239 246 255;
+    --accent-foreground: 15 23 42;
 
-    --destructive: 239 68 68;
-    --destructive-foreground: 248 250 252;
+    --destructive: 220 38 38;
+    --destructive-foreground: 255 255 255;
 
     --border: 226 232 240;
     --input: 226 232 240;
-    --ring: 59 130 246;
+    --ring: 37 99 235;
 
     --radius: 0.75rem;
 
-    /* Role-based Colors */
-    --student: 34 197 94;
+    /* Role-based Colors - Enhanced visibility */
+    --student: 22 163 74;
     --student-foreground: 255 255 255;
 
-    --admin: 59 130 246;
+    --admin: 37 99 235;
     --admin-foreground: 255 255 255;
 
-    --hod: 168 85 247;
+    --hod: 147 51 234;
     --hod-foreground: 255 255 255;
 
-    /* Status Colors */
-    --success: 34 197 94;
+    /* Status Colors - Better contrast */
+    --success: 22 163 74;
     --success-foreground: 255 255 255;
 
-    --warning: 251 191 36;
-    --warning-foreground: 15 23 42;
+    --warning: 245 158 11;
+    --warning-foreground: 255 255 255;
 
-    /* Sidebar */
-    --sidebar-background: 255 255 255;
-    --sidebar-foreground: 71 85 105;
+    /* Sidebar - Enhanced */
+    --sidebar-background: 248 250 252;
+    --sidebar-foreground: 51 65 85;
     --sidebar-primary: 15 23 42;
-    --sidebar-primary-foreground: 248 250 252;
-    --sidebar-accent: 248 250 252;
+    --sidebar-primary-foreground: 255 255 255;
+    --sidebar-accent: 241 245 249;
     --sidebar-accent-foreground: 15 23 42;
     --sidebar-border: 226 232 240;
-    --sidebar-ring: 59 130 246;
+    --sidebar-ring: 37 99 235;
   }
 
   .dark {
-    --background: 15 23 42;
+    --background: 2 6 23;
     --foreground: 248 250 252;
 
-    --card: 30 41 59;
+    --card: 15 23 42;
     --card-foreground: 248 250 252;
 
-    --popover: 30 41 59;
+    --popover: 15 23 42;
     --popover-foreground: 248 250 252;
 
-    --primary: 30 58 138;
-    --primary-foreground: 219 234 254;
+    --primary: 59 130 246;
+    --primary-foreground: 15 23 42;
 
-    --secondary: 51 65 85;
-    --secondary-foreground: 226 232 240;
+    --secondary: 30 41 59;
+    --secondary-foreground: 203 213 225;
 
-    --muted: 51 65 85;
+    --muted: 30 41 59;
     --muted-foreground: 148 163 184;
 
-    --accent: 51 65 85;
-    --accent-foreground: 226 232 240;
+    --accent: 30 41 59;
+    --accent-foreground: 203 213 225;
 
-    --destructive: 220 38 38;
-    --destructive-foreground: 248 250 252;
+    --destructive: 239 68 68;
+    --destructive-foreground: 15 23 42;
 
-    --border: 71 85 105;
-    --input: 71 85 105;
+    --border: 51 65 85;
+    --input: 51 65 85;
     --ring: 147 197 253;
 
-    --sidebar-background: 30 41 59;
+    --sidebar-background: 15 23 42;
     --sidebar-foreground: 203 213 225;
     --sidebar-primary: 248 250 252;
     --sidebar-primary-foreground: 15 23 42;
-    --sidebar-accent: 51 65 85;
-    --sidebar-accent-foreground: 248 250 252;
-    --sidebar-border: 71 85 105;
+    --sidebar-accent: 30 41 59;
+    --sidebar-accent-foreground: 203 213 225;
+    --sidebar-border: 51 65 85;
     --sidebar-ring: 147 197 253;
   }
 }
@@ -115,10 +115,11 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold tracking-tight;
+    @apply font-bold tracking-tight text-foreground;
   }
 
   h1 {
@@ -132,54 +133,92 @@
   h3 {
     @apply text-xl lg:text-2xl;
   }
+
+  p {
+    @apply text-foreground leading-relaxed;
+  }
 }
 
 @layer components {
   .dashboard-card {
-    @apply bg-card border border-border rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow duration-200;
+    @apply bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-lg transition-all duration-300 hover:border-primary/20;
   }
 
   .stat-card {
-    @apply dashboard-card flex flex-col items-center text-center space-y-2;
+    @apply dashboard-card flex flex-col items-center text-center space-y-3 hover:scale-105 transition-transform duration-200;
   }
 
   .data-table {
-    @apply w-full border-collapse bg-card rounded-lg overflow-hidden shadow-sm;
+    @apply w-full border-collapse bg-card rounded-xl overflow-hidden shadow-sm border border-border;
   }
 
   .table-header {
-    @apply bg-muted text-muted-foreground font-semibold text-sm uppercase tracking-wide;
+    @apply bg-muted/50 text-foreground font-bold text-sm uppercase tracking-wider px-4 py-3;
   }
 
   .table-cell {
-    @apply px-4 py-3 border-b border-border;
+    @apply px-4 py-4 border-b border-border text-foreground;
   }
 
   .status-badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide;
   }
 
   .status-paid {
-    @apply status-badge bg-success text-success-foreground;
+    @apply status-badge bg-success text-success-foreground shadow-sm;
   }
 
   .status-pending {
-    @apply status-badge bg-warning text-warning-foreground;
+    @apply status-badge bg-warning text-warning-foreground shadow-sm;
   }
 
   .status-overdue {
-    @apply status-badge bg-destructive text-destructive-foreground;
+    @apply status-badge bg-destructive text-destructive-foreground shadow-sm;
   }
 
   .role-student {
-    @apply bg-student text-student-foreground;
+    @apply bg-student text-student-foreground font-bold px-3 py-1 rounded-full text-xs uppercase tracking-wide;
   }
 
   .role-admin {
-    @apply bg-admin text-admin-foreground;
+    @apply bg-admin text-admin-foreground font-bold px-3 py-1 rounded-full text-xs uppercase tracking-wide;
   }
 
   .role-hod {
-    @apply bg-hod text-hod-foreground;
+    @apply bg-hod text-hod-foreground font-bold px-3 py-1 rounded-full text-xs uppercase tracking-wide;
   }
+
+  .page-header {
+    @apply bg-card border-b border-border shadow-sm;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-foreground;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-muted-foreground font-medium;
+  }
+
+  .metric-value {
+    @apply text-3xl font-bold text-foreground;
+  }
+
+  .metric-label {
+    @apply text-sm font-medium text-muted-foreground uppercase tracking-wide;
+  }
+}
+
+/* Enhanced animations and transitions */
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
