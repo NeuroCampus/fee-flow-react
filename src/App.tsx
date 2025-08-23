@@ -7,11 +7,13 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
-import Dashboard from "@/pages/Dashboard";
+import StudentDashboard from "@/pages/StudentDashboard";
 import Unauthorized from "@/pages/Unauthorized";
 import NotFound from "@/pages/NotFound";
 import AdminDashboard from './pages/AdminDashboard';
 import HODDashboard from './pages/HODDashboard';
+import AdminLayout from './layouts/AdminLayout';
+import Dashboard from './pages/Dashboard';
 
 const queryClient = new QueryClient();
 
@@ -21,9 +23,11 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <AuthProvider>
-          <RouterContent />
-        </AuthProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <RouterContent />
+          </AuthProvider>
+        </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );
@@ -33,54 +37,78 @@ const RouterContent = () => {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div>Loading...</div>; // Or a proper loading spinner component
+    return <div>Loading...</div>;
   }
 
   let landingRoute = '/login';
   if (user) {
     if (user.role === 'admin') {
-      landingRoute = '/admin/dashboard';
+      landingRoute = '/admin/students';
     } else if (user.role === 'hod') {
-      landingRoute = '/hod/dashboard';
+      landingRoute = '/hod-dashboard';
     } else {
-      landingRoute = '/dashboard'; // Default to student dashboard
+      landingRoute = '/student-dashboard';
     }
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route 
-          path="/dashboard" 
-          element={
-            <ProtectedRoute requiredRole="student">
-              <Dashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/dashboard" 
-          element={
-            <ProtectedRoute requiredRole="admin">
-              <AdminDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/hod/dashboard" 
-          element={
-            <ProtectedRoute requiredRole="hod">
-              <HODDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route path="/unauthorized" element={<Unauthorized />} />
-        <Route path="/" element={<Navigate to={landingRoute} replace />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      
+      {/* General Dashboard Route */}
+      <Route 
+        path="/dashboard" 
+        element={
+          <ProtectedRoute requiredRoles={['student', 'admin', 'hod']}>
+            <Dashboard />
+          </ProtectedRoute>
+        } 
+      />
+      
+      {/* Student Dashboard */}
+      <Route 
+        path="/student-dashboard" 
+        element={
+          <ProtectedRoute requiredRoles={['student']}>
+            <StudentDashboard />
+          </ProtectedRoute>
+        } 
+      />
+      
+      {/* Admin Routes */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute requiredRoles={['admin']}>
+            <AdminLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="students" replace />} />
+        <Route path="students" element={<AdminDashboard />} />
+        <Route path="fee-components" element={<AdminDashboard />} />
+        <Route path="fee-templates" element={<AdminDashboard />} />
+        <Route path="fee-assignments" element={<AdminDashboard />} />
+        <Route path="payments" element={<AdminDashboard />} />
+        <Route path="reports" element={<AdminDashboard />} />
+      </Route>
+      
+      {/* HOD Dashboard */}
+      <Route 
+        path="/hod-dashboard" 
+        element={
+          <ProtectedRoute requiredRoles={['hod']}>
+            <HODDashboard />
+          </ProtectedRoute>
+        } 
+      />
+      
+      {/* Other Routes */}
+      <Route path="/unauthorized" element={<Unauthorized />} />
+      <Route path="/" element={<Navigate to={landingRoute} replace />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
-}
+};
 
 export default App;

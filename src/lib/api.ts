@@ -80,9 +80,14 @@ interface Notification {
 
 interface StudentDashboardData {
   student: StudentProfile;
-  dues: number;
-  total_fee: number;
-  paid_amount: number;
+  fee_overview: {
+    total_fee: number;
+    paid_amount: number;
+    balance_amount: number;
+    progress_percentage: number;
+  };
+  fee_breakdown: Record<string, number>;
+  recent_payments: Payment[];
   invoices: Invoice[];
 }
 
@@ -94,7 +99,7 @@ interface AuthResponse {
 
 interface LoginCredentials {
   email: string;
-  password?: string;
+  password: string;
 }
 
 interface RegisterData extends LoginCredentials {
@@ -106,12 +111,72 @@ interface RegisterData extends LoginCredentials {
   status?: string;
 }
 
+interface CustomFeeStructure {
+  id: number;
+  student: number;
+  components: Record<string, number>;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Receipt {
+  id: number;
+  payment: number;
+  receipt_number: string;
+  amount: number;
+  generated_at: string;
+}
+
+interface OutstandingReport {
+  invoice_id: number;
+  student_name: string;
+  student_usn: string;
+  department: string;
+  semester: number;
+  total_amount: number;
+  paid_amount: number;
+  balance_amount: number;
+  due_date: string;
+  status: string;
+}
+
+interface CollectionsReport {
+  total_collections: number;
+  total_students: number;
+  collection_rate: number;
+  outstanding_amount: number;
+}
+
+interface HODReport {
+  department: string;
+  total_students: number;
+  total_collections: number;
+  collection_rate: number;
+  outstanding_amount: number;
+  semester_breakdown: Array<{
+    semester: number;
+    students: number;
+    collected: number;
+    pending: number;
+    amount: number;
+  }>;
+}
+
+import { config } from '@/config/env';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: config.API_BASE_URL,
 });
 
+// Test backend connectivity
 api.interceptors.request.use(
   (config) => {
+    // Add a test call to verify backend is running
+    if (config.url === '/test/') {
+      console.log('Testing backend connectivity...');
+    }
+    
     const accessToken = localStorage.getItem('accessToken');
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
@@ -125,15 +190,15 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
-          const res = await axios.post(
-            `${import.meta.env.VITE_API_BASE_URL}/auth/token/refresh/`,
-            { refresh: refreshToken }
-          );
+                  const res = await axios.post(
+          `${config.API_BASE_URL}/auth/token/refresh/`,
+          { refresh: refreshToken }
+        );
           localStorage.setItem('accessToken', res.data.access);
           api.defaults.headers.common['Authorization'] = `Bearer ${res.data.access}`;
           return api(originalRequest);
@@ -157,61 +222,97 @@ api.interceptors.response.use(
 const authAPI = {
   login: (credentials: LoginCredentials) => api.post<AuthResponse>('/auth/login/', credentials),
   register: (userData: RegisterData) => api.post('/auth/register/', userData),
-  me: (accessToken: string) => api.get<User>('/auth/me/', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  }),
+  me: () => api.get<User>('/auth/me/'),
+  logout: () => api.post('/auth/logout/'),
+  test: () => api.get('/test/'), // Test backend connectivity
 };
 
 const studentAPI = {
-  getDashboard: () => api.get<StudentDashboardData>('/student/dashboard/'),
-  updateProfile: (data: Partial<StudentProfile>) => api.patch<StudentProfile>('/student/me/profile/', data),
-  createCheckoutSession: (invoiceId: number, amount: number) => api.post<{ checkout_url: string }>(`/payments/${invoiceId}/create-checkout-session/`, { amount }),
-  getPayments: () => api.get<{ payments: Payment[] }>('/student/payments/'),
-  getReceipt: (paymentId: number) => api.get(`/student/payments/${paymentId}/receipt/`, { responseType: 'arraybuffer' }),
-  getNotifications: () => api.get<{ notifications: Notification[] }>('/student/notifications/'),
-  markNotificationRead: (notificationId: number) => api.post(`/student/notifications/${notificationId}/mark-read/`),
+  getDashboard: () => api.get<StudentDashboardData>('/api/student/dashboard/').then(res => res.data),
+  updateProfile: (data: Partial<StudentProfile>) => api.patch<StudentProfile>('/api/student/profile/edit/', data).then(res => res.data),
+  createCheckoutSession: (invoiceId: number, amount: number) => api.post<{ checkout_url: string }>(`/invoices/${invoiceId}/create-checkout-session/`, { amount }).then(res => res.data),
+  getPayments: () => api.get<{ payments: Payment[] }>('/api/student/payments/').then(res => res.data),
+  getReceipt: (paymentId: number) => api.get(`/api/student/payments/${paymentId}/receipt/`, { responseType: 'arraybuffer' }),
+  getNotifications: () => api.get<{ notifications: Notification[] }>('/notifications/').then(res => res.data),
+  markNotificationRead: (notificationId: number) => api.post(`/notifications/${notificationId}/mark-read/`).then(res => res.data),
+  getReceipts: () => api.get<{ receipts: Receipt[] }>('/api/student/receipts/').then(res => res.data),
 };
 
 const adminAPI = {
   // Student Management
-  getStudents: (query?: string) => api.get<{ students: StudentProfile[] }>(`/admin/students/`, { params: { query } }),
-  addStudent: (data: any) => api.post<StudentProfile>(`/admin/students/`, data),
-  updateStudent: (id: number, data: Partial<StudentProfile>) => api.patch<StudentProfile>(`/admin/students/${id}/`, data),
-  deleteStudent: (id: number) => api.delete(`/admin/students/${id}/`),
+  getStudents: (query?: string) => api.get<{ students: StudentProfile[] }>(`/students/`, { params: { query } }).then(res => res.data),
+  addStudent: (data: Omit<StudentProfile, 'id'> & { email: string; password: string }) => api.post<StudentProfile>(`/students/`, data).then(res => res.data),
+  updateStudent: (id: number, data: Partial<StudentProfile>) => api.patch<StudentProfile>(`/students/${id}/`, data).then(res => res.data),
+  deleteStudent: (id: number) => api.delete(`/students/${id}/`),
+  getStudentDetail: (id: number) => api.get<StudentProfile>(`/students/${id}/`).then(res => res.data),
 
   // Fee Components
-  getFeeComponents: () => api.get<FeeComponent[]>(`/admin/fee-components/`),
-  addFeeComponent: (data: Omit<FeeComponent, 'id'>) => api.post<FeeComponent>(`/admin/fee-components/`, data),
-  updateFeeComponent: (id: number, data: Partial<Omit<FeeComponent, 'id'>>) => api.patch<FeeComponent>(`/admin/fee-components/${id}/`, data),
-  deleteFeeComponent: (id: number) => api.delete(`/admin/fee-components/${id}/`),
+  getFeeComponents: () => api.get<FeeComponent[]>(`/fee/components/`).then(res => res.data),
+  addFeeComponent: (data: Omit<FeeComponent, 'id'>) => api.post<FeeComponent>(`/fee/components/`, data).then(res => res.data),
+  updateFeeComponent: (id: number, data: Partial<Omit<FeeComponent, 'id'>>) => api.patch<FeeComponent>(`/fee/components/${id}/`, data).then(res => res.data),
+  deleteFeeComponent: (id: number) => api.delete(`/fee/components/${id}/`),
 
   // Fee Templates
-  getFeeTemplates: () => api.get<FeeTemplate[]>(`/admin/fee-templates/`),
-  addFeeTemplate: (data: Omit<FeeTemplate, 'id' | 'components'>) => api.post<FeeTemplate>(`/admin/fee-templates/`, data),
-  updateFeeTemplate: (id: number, data: Partial<Omit<FeeTemplate, 'id' | 'components'>>) => api.patch<FeeTemplate>(`/admin/fee-templates/${id}/`, data),
-  deleteFeeTemplate: (id: number) => api.delete(`/admin/fee-templates/${id}/`),
+  getFeeTemplates: () => api.get<FeeTemplate[]>(`/fee/templates/`).then(res => res.data),
+  addFeeTemplate: (data: Omit<FeeTemplate, 'id' | 'components'>) => api.post<FeeTemplate>(`/fee/templates/`, data).then(res => res.data),
+  updateFeeTemplate: (id: number, data: Partial<Omit<FeeTemplate, 'id' | 'components'>>) => api.patch<FeeTemplate>(`/fee/templates/${id}/`, data).then(res => res.data),
+  deleteFeeTemplate: (id: number) => api.delete(`/fee/templates/${id}/`),
 
   // Fee Assignments
-  getFeeAssignments: () => api.get<FeeAssignment[]>(`/admin/fee-assignments/`),
-  addFeeAssignment: (data: Omit<FeeAssignment, 'id'>) => api.post<FeeAssignment>(`/admin/fee-assignments/`, data),
-  updateFeeAssignment: (id: number, data: Partial<FeeAssignment>) => api.patch<FeeAssignment>(`/admin/fee-assignments/${id}/`, data),
+  getFeeAssignments: () => api.get<FeeAssignment[]>(`/admin/fee-assignments/`).then(res => res.data),
+  addFeeAssignment: (data: Omit<FeeAssignment, 'id'>) => api.post<FeeAssignment>(`/admin/fee-assignments/`, data).then(res => res.data),
+  updateFeeAssignment: (id: number, data: Partial<FeeAssignment>) => api.patch<FeeAssignment>(`/admin/fee-assignments/${id}/`, data).then(res => res.data),
   deleteFeeAssignment: (id: number) => api.delete(`/admin/fee-assignments/${id}/`),
 
+  // Individual Fee Assignment (NEW)
+  getIndividualFeeAssignment: (studentId: number) => api.get<any>(`/admin/students/${studentId}/individual-fees/`).then(res => res.data),
+  assignIndividualFees: (studentId: number, data: { components: Record<string, number> }) => api.post<any>(`/admin/students/${studentId}/individual-fees/`, data).then(res => res.data),
+  getStudentFeeBreakdown: (studentId: number) => api.get<any>(`/admin/students/${studentId}/fee-breakdown/`).then(res => res.data),
+
   // Invoices
-  getInvoices: (studentId?: number, semester?: number) => api.get<Invoice[]>(`/admin/invoices/`, { params: { student_id: studentId, semester: semester } }),
-  updateInvoice: (id: number, data: Partial<Invoice>) => api.patch<Invoice>(`/admin/invoices/${id}/`, data),
+  getInvoices: (studentId?: number, semester?: number) => api.get<{ invoices: Invoice[] }>(`/admin/invoices/`, { params: { student_id: studentId, semester: semester } }).then(res => res.data.invoices),
+  updateInvoice: (id: number, data: Partial<Invoice>) => api.patch<Invoice>(`/admin/invoices/${id}/`, data).then(res => res.data),
   
   // Payments
-  getPayments: (studentId?: number) => api.get<Payment[]>(`/admin/payments/`, { params: { student_id: studentId } }),
-  addOfflinePayment: (data: { invoice_id: number; amount: number; mode: string; transaction_id?: string }) => api.post<Payment>(`/admin/offline-payment/`, data),
+  getPayments: (studentId?: number) => api.get<{ payments: Payment[] }>(`/payments/`, { params: { student_id: studentId } }).then(res => res.data.payments),
+  addOfflinePayment: (data: { invoice_id: number; amount: number; mode: string; transaction_id?: string }) => api.post<Payment>(`/payments/offline/`, data).then(res => res.data),
 
   // Reports
   getOutstandingReports: (dept?: string, semester?: number) => api.get<{
-    outstanding_invoices: Invoice[];
+    outstanding_invoices: OutstandingReport[];
     total_outstanding_amount: number;
-  }>(`/admin/reports/outstanding/`, { params: { dept, semester } }),
+  }>(`/admin/reports/outstanding/`, { params: { dept, semester } }).then(res => res.data),
+  
+  getCollectionsReport: (dept?: string, semester?: number) => api.get<CollectionsReport>(`/admin/reports/collections/`, { params: { dept, semester } }).then(res => res.data),
+
+  // Student Fee Management
+  getStudentFeeProfile: (studentId: number) => api.get<{ fee_profile: any }>(`/admin/students/${studentId}/fee-profile/`).then(res => res.data),
+  getCustomFeeStructure: (studentId: number) => api.get<CustomFeeStructure>(`/admin/students/${studentId}/custom-fees/`).then(res => res.data),
+  updateCustomFeeStructure: (studentId: number, data: { components: Record<string, number> }) => api.post<CustomFeeStructure>(`/admin/students/${studentId}/custom-fees/`, data).then(res => res.data),
+  
+  // Student Status Dashboard
+  getStudentStatusDashboard: () => api.get<{ status_breakdown: any }>(`/admin/student-status-dashboard/`).then(res => res.data),
 };
 
-export { authAPI, studentAPI, adminAPI };
+const hodAPI = {
+  getStudents: (dept?: string) => api.get<{ students: StudentProfile[] }>(`/hod/students/`, { params: { dept } }).then(res => res.data),
+  getReports: (dept?: string) => api.get<HODReport>(`/hod/reports/`, { params: { dept } }).then(res => res.data),
+};
+
+export { authAPI, studentAPI, adminAPI, hodAPI };
+export type { 
+  User, 
+  StudentProfile, 
+  FeeComponent, 
+  FeeTemplate, 
+  FeeAssignment, 
+  Invoice, 
+  Payment, 
+  Notification,
+  StudentDashboardData,
+  CustomFeeStructure,
+  Receipt,
+  OutstandingReport,
+  CollectionsReport,
+  HODReport
+};

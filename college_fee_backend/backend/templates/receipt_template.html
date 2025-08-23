@@ -1,80 +1,255 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Payment Receipt</title>
+    <meta charset="utf-8">
+    <title>Fee Receipt - {{ receipt.receipt_number }}</title>
     <style>
-        body { font-family: 'Helvetica Neue', 'Helvetica', Helvetica, Arial, sans-serif; font-size: 14px; color: #333; }
-        .container { width: 80%; margin: auto; padding: 20px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, .15); }
-        .header { text-align: center; margin-bottom: 20px; }
-        .header h1 { color: #333; font-size: 24px; margin-bottom: 5px; }
-        .header p { color: #777; font-size: 12px; }
-        .details table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        .details table td, .details table th { border: 1px solid #eee; padding: 8px; text-align: left; }
-        .details table th { background-color: #f2f2f2; }
-        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #777; }
-        .logo { max-width: 100px; margin-bottom: 10px; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .receipt-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .college-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e40af;
+            margin-bottom: 5px;
+        }
+        .college-address {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 10px;
+        }
+        .receipt-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 5px;
+        }
+        .receipt-number {
+            font-size: 16px;
+            color: #374151;
+            font-weight: 600;
+        }
+        .student-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+        }
+        .info-section {
+            flex: 1;
+        }
+        .info-section h3 {
+            margin: 0 0 10px 0;
+            color: #374151;
+            font-size: 16px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 5px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #4b5563;
+        }
+        .info-value {
+            color: #1f2937;
+        }
+        .payment-details {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f0f9ff;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+        }
+        .payment-details h3 {
+            margin: 0 0 15px 0;
+            color: #1e40af;
+            font-size: 18px;
+        }
+        .payment-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 15px;
+        }
+        .payment-label {
+            font-weight: 600;
+            color: #1e40af;
+        }
+        .payment-value {
+            color: #1f2937;
+            font-weight: 600;
+        }
+        .total-row {
+            border-top: 2px solid #2563eb;
+            padding-top: 10px;
+            margin-top: 10px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 12px;
+        }
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+        }
+        .signature-box {
+            text-align: center;
+            flex: 1;
+            margin: 0 20px;
+        }
+        .signature-line {
+            border-top: 1px solid #000;
+            margin-top: 40px;
+            margin-bottom: 5px;
+        }
+        .signature-label {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background-color: #10b981;
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="receipt-container">
+        <!-- Header -->
         <div class="header">
-            <img src="https://via.placeholder.com/100x50?text=College+Logo" alt="College Logo" class="logo">
-            <h1>Payment Receipt</h1>
-            <p><strong>College Name</strong><br>123 College Road, University City, 12345</p>
+            <div class="college-name">{{ college_name }}</div>
+            <div class="college-address">{{ college_address }}</div>
+            <div class="receipt-title">FEE RECEIPT</div>
+            <div class="receipt-number">Receipt No: {{ receipt.receipt_number }}</div>
         </div>
 
-        <div class="details">
-            <table>
-                <tr>
-                    <th>Receipt ID:</th>
-                    <td>{{ payment.id }}</td>
-                </tr>
-                <tr>
-                    <th>Date:</th>
-                    <td>{{ payment.timestamp|date:"F d, Y" }}</td>
-                </tr>
-                <tr>
-                    <th>Student Name:</th>
-                    <td>{{ student.name }}</td>
-                </tr>
-                <tr>
-                    <th>USN:</th>
-                    <td>{{ student.usn }}</td>
-                </tr>
-                <tr>
-                    <th>Department:</th>
-                    <td>{{ student.dept }}</td>
-                </tr>
-                <tr>
-                    <th>Semester:</th>
-                    <td>{{ student.semester }}</td>
-                </tr>
-                <tr>
-                    <th>Invoice ID:</th>
-                    <td>{{ invoice.id }}</td>
-                </tr>
-                <tr>
-                    <th>Payment Mode:</th>
-                    <td>{{ payment.get_mode_display }}</td>
-                </tr>
-                <tr>
-                    <th>Transaction ID:</th>
-                    <td>{{ payment.transaction_id }}</td>
-                </tr>
-                <tr>
-                    <th>Amount Paid:</th>
-                    <td>₹{{ payment.amount }}</td>
-                </tr>
-                <tr>
-                    <th>Status:</th>
-                    <td>{{ payment.get_status_display }}</td>
-                </tr>
-            </table>
+        <!-- Student Information -->
+        <div class="student-info">
+            <div class="info-section">
+                <h3>Student Details</h3>
+                <div class="info-row">
+                    <span class="info-label">Name:</span>
+                    <span class="info-value">{{ student.name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">USN:</span>
+                    <span class="info-value">{{ student.usn }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Department:</span>
+                    <span class="info-value">{{ student.dept }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Semester:</span>
+                    <span class="info-value">{{ student.semester }}</span>
+                </div>
+            </div>
+            
+            <div class="info-section">
+                <h3>Receipt Details</h3>
+                <div class="info-row">
+                    <span class="info-label">Date:</span>
+                    <span class="info-value">{{ payment_date }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Status:</span>
+                    <span class="info-value">
+                        <span class="status-badge">Paid</span>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Transaction ID:</span>
+                    <span class="info-value">{{ transaction_id }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Invoice ID:</span>
+                    <span class="info-value">{{ invoice_id }}</span>
+                </div>
+            </div>
         </div>
 
+        <!-- Payment Details -->
+        <div class="payment-details">
+            <h3>Payment Information</h3>
+            <div class="payment-row">
+                <span class="payment-label">Payment Amount:</span>
+                <span class="payment-value">₹{{ payment.amount }}</span>
+            </div>
+            <div class="payment-row">
+                <span class="payment-label">Payment Mode:</span>
+                <span class="payment-value">{{ payment.mode|title }}</span>
+            </div>
+            <div class="payment-row">
+                <span class="payment-label">Total Fee:</span>
+                <span class="payment-value">₹{{ total_fee }}</span>
+            </div>
+            <div class="payment-row">
+                <span class="payment-label">Previously Paid:</span>
+                <span class="payment-value">₹{{ paid_amount|add:"-"|add:payment.amount }}</span>
+            </div>
+            <div class="payment-row total-row">
+                <span class="payment-label">Total Paid:</span>
+                <span class="payment-value">₹{{ paid_amount }}</span>
+            </div>
+            <div class="payment-row total-row">
+                <span class="payment-label">Balance Amount:</span>
+                <span class="payment-value">₹{{ balance_amount }}</span>
+            </div>
+        </div>
+
+        <!-- Signature Section -->
+        <div class="signature-section">
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <div class="signature-label">Student Signature</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <div class="signature-label">Authorized Signatory</div>
+            </div>
+        </div>
+
+        <!-- Footer -->
         <div class="footer">
-            <p>Thank you for your payment.</p>
-            <p>&copy; {{ current_year }} College Name. All rights reserved.</p>
+            <p>This is a computer generated receipt. No signature required.</p>
+            <p>Generated on: {{ receipt.generated_at|date:"d-m-Y H:i:s" }}</p>
+            <p>For any queries, please contact the accounts department.</p>
         </div>
     </div>
 </body>

@@ -5,6 +5,7 @@ import StudentDashboard from './StudentDashboard';
 import AdminDashboard from './AdminDashboard';
 import HODDashboard from './HODDashboard';
 
+
 const Dashboard = () => {
   const { user } = useAuth();
 
@@ -12,20 +13,23 @@ const Dashboard = () => {
     return null;
   }
 
-  switch (user.role) {
-    case 'student':
-      return <StudentDashboard />;
-    case 'admin':
-      return <AdminDashboard />;
-    case 'hod':
-      return <HODDashboard />;
-    default:
-      return (
+  // Add backend status check for debugging
+  const showBackendStatus = import.meta.env.DEV; // Only show in development
+
+  return (
+    <div>
+      
+      
+      {user.role === 'student' && <StudentDashboard />}
+      {user.role === 'admin' && <AdminDashboard />}
+      {user.role === 'hod' && <HODDashboard />}
+      {!['student', 'admin', 'hod'].includes(user.role) && (
         <div className="min-h-screen flex items-center justify-center">
-          <p>Invalid user role</p>
+          <p>Invalid user role: {user.role}</p>
         </div>
-      );
-  }
+      )}
+    </div>
+  );
 };
 
 export default Dashboard;
