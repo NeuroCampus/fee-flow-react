@@ -37,11 +37,87 @@ interface FeeAssignmentForm {
 }
 
 interface OfflinePaymentForm {
-  invoice_id: number | string;
+  invoice_id: number;
   amount: number;
   mode: string;
   transaction_id?: string;
 }
+
+// Individual Fee Row Component
+const IndividualFeeRow: React.FC<{
+  student: StudentProfile;
+  onAssignFees: () => void;
+}> = ({ student, onAssignFees }) => {
+  const [customFees, setCustomFees] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch custom fees for this student
+  React.useEffect(() => {
+    const fetchCustomFees = async () => {
+      setIsLoading(true);
+      try {
+        const response = await adminAPI.getIndividualFeeAssignment(student.id);
+        setCustomFees(response);
+      } catch (error) {
+        console.error('Error fetching custom fees:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCustomFees();
+  }, [student.id]);
+
+  if (isLoading) {
+    return (
+      <TableRow>
+        <TableCell colSpan={7} className="text-center">
+          <Loader2 className="h-4 w-4 animate-spin inline-block mr-2" /> Loading...
+        </TableCell>
+      </TableRow>
+    );
+  }
+
+  return (
+    <TableRow>
+      <TableCell>{student.name}</TableCell>
+      <TableCell>{student.usn}</TableCell>
+      <TableCell>{student.dept}</TableCell>
+      <TableCell>{student.semester}</TableCell>
+      <TableCell>
+        {customFees?.custom_fee_structure ? (
+          <div className="text-sm">
+            {Object.entries(customFees.custom_fee_structure).map(([name, amount]) => (
+              <div key={name} className="flex justify-between">
+                <span>{name}:</span>
+                <span>₹{Number(amount).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">No custom fees</span>
+        )}
+      </TableCell>
+      <TableCell>
+        {customFees?.total_amount ? (
+          <span className="font-semibold">₹{customFees.total_amount.toLocaleString()}</span>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onAssignFees}
+        >
+          <Edit className="h-4 w-4 mr-2" />
+          {customFees?.custom_fee_structure ? 'Edit Fees' : 'Assign Fees'}
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+};
 
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
@@ -92,368 +168,344 @@ const AdminDashboard = () => {
   // Payment Tracking states
   const [isOfflinePaymentDialogOpen, setIsOfflinePaymentDialogOpen] = useState(false);
   const [offlinePaymentForm, setOfflinePaymentForm] = useState<OfflinePaymentForm>({
-    invoice_id: "",
+    invoice_id: 0,
     amount: 0,
     mode: "Cash",
     transaction_id: "",
   });
   const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
-  const [paymentFilterSemester, setPaymentFilterSemester] = useState('');
+  const [paymentFilterSemester, setPaymentFilterSemester] = useState('all');
 
   // Reports states
-  const [reportFilterDept, setReportFilterDept] = useState('');
-  const [reportFilterSemester, setReportFilterSemester] = useState('');
+  const [reportFilterDept, setReportFilterDept] = useState('all');
+  const [reportFilterSemester, setReportFilterSemester] = useState('all');
 
   // Queries
-  const { data: studentsData, isLoading: isLoadingStudents } = useQuery(
-    ["adminStudents", studentSearchQuery],
-    () => adminAPI.getStudents(studentSearchQuery)
-  );
+  const { data: studentsData, isLoading: isLoadingStudents } = useQuery({
+    queryKey: ["adminStudents", studentSearchQuery],
+    queryFn: () => adminAPI.getStudents(studentSearchQuery)
+  });
 
-  const { data: feeComponentsData, isLoading: isLoadingFeeComponents } = useQuery(
-    ["feeComponents"],
-    adminAPI.getFeeComponents
-  );
+  const { data: feeComponentsData, isLoading: isLoadingFeeComponents } = useQuery({
+    queryKey: ["feeComponents"],
+    queryFn: adminAPI.getFeeComponents
+  });
 
-  const { data: feeTemplatesData, isLoading: isLoadingFeeTemplates } = useQuery(
-    ["feeTemplates"],
-    adminAPI.getFeeTemplates
-  );
+  const { data: feeTemplatesData, isLoading: isLoadingFeeTemplates } = useQuery({
+    queryKey: ["feeTemplates"],
+    queryFn: adminAPI.getFeeTemplates
+  });
 
-  const { data: feeAssignmentsData, isLoading: isLoadingFeeAssignments } = useQuery(
-    ["feeAssignments"],
-    adminAPI.getFeeAssignments
-  );
+  const { data: feeAssignmentsData, isLoading: isLoadingFeeAssignments } = useQuery({
+    queryKey: ["feeAssignments"],
+    queryFn: adminAPI.getFeeAssignments
+  });
 
-  const { data: paymentsData, isLoading: isLoadingPayments } = useQuery(
-    ["adminPayments", paymentSearchQuery, paymentFilterSemester],
-    () => adminAPI.getPayments(Number(paymentSearchQuery) || undefined),
-    // { enabled: activeTab === "payments" } // Only fetch when on payments tab
-  );
+  const { data: paymentsData, isLoading: isLoadingPayments } = useQuery({
+    queryKey: ["adminPayments", paymentSearchQuery, paymentFilterSemester],
+    queryFn: () => adminAPI.getPayments(Number(paymentSearchQuery) || undefined),
+    // enabled: activeTab === "payments" // Only fetch when on payments tab
+  });
 
-  const { data: invoicesData, isLoading: isLoadingInvoices } = useQuery(
-    ["adminInvoices", paymentSearchQuery, paymentFilterSemester],
-    () => adminAPI.getInvoices(Number(paymentSearchQuery) || undefined, Number(paymentFilterSemester) || undefined),
-    // { enabled: activeTab === "payments" } // Only fetch when on payments tab
-  );
+  const { data: invoicesData, isLoading: isLoadingInvoices } = useQuery({
+    queryKey: ["adminInvoices", paymentSearchQuery, paymentFilterSemester],
+    queryFn: () => adminAPI.getInvoices(Number(paymentSearchQuery) || undefined, paymentFilterSemester === 'all' ? undefined : Number(paymentFilterSemester)),
+    // enabled: activeTab === "payments" // Only fetch when on payments tab
+  });
 
-  const { data: outstandingReportsData, isLoading: isLoadingOutstandingReports } = useQuery(
-    ["outstandingReports", reportFilterDept, reportFilterSemester],
-    () => adminAPI.getOutstandingReports(reportFilterDept || undefined, Number(reportFilterSemester) || undefined),
-    { enabled: activeTab === "reports" } // Only fetch when on reports tab
-  );
+  const { data: outstandingReportsData, isLoading: isLoadingOutstandingReports } = useQuery({
+    queryKey: ["outstandingReports", reportFilterDept, reportFilterSemester],
+    queryFn: () => adminAPI.getOutstandingReports(reportFilterDept === 'all' ? undefined : reportFilterDept, reportFilterSemester === 'all' ? undefined : Number(reportFilterSemester)),
+    enabled: activeTab === "reports" // Only fetch when on reports tab
+  });
+
+
 
   // Mutations for Students
-  const addStudentMutation = useMutation(
-    (data: any) => adminAPI.addStudent(data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["adminStudents"]);
-        toast({
-          title: "Student Added",
-          description: "The student has been successfully added.",
-        });
-        setIsStudentDialogOpen(false);
-        setStudentForm({
-          email: '',
-          password: '',
-          name: '',
-          usn: '',
-          dept: '',
-          semester: 1,
-          status: 'active',
-        });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to add student",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const addStudentMutation = useMutation({
+    mutationFn: (data: any) => adminAPI.addStudent(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminStudents"] });
+      toast({
+        title: "Student Added",
+        description: "The student has been successfully added.",
+      });
+      setIsStudentDialogOpen(false);
+      setStudentForm({
+        email: '',
+        password: '',
+        name: '',
+        usn: '',
+        dept: '',
+        semester: 1,
+        status: 'active',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to add student",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const updateStudentMutation = useMutation(
-    (variables: { id: number; data: Partial<StudentProfile> }) =>
+  const updateStudentMutation = useMutation({
+    mutationFn: (variables: { id: number; data: Partial<StudentProfile> }) =>
       adminAPI.updateStudent(variables.id, variables.data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["adminStudents"]);
-        toast({
-          title: "Student Updated",
-          description: "The student has been successfully updated.",
-        });
-        setIsStudentDialogOpen(false);
-        setCurrentStudent(null);
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to update student",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminStudents"] });
+      toast({
+        title: "Student Updated",
+        description: "The student has been successfully updated.",
+      });
+      setIsStudentDialogOpen(false);
+      setCurrentStudent(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update student",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const deleteStudentMutation = useMutation(
-    (id: number) => adminAPI.deleteStudent(id),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["adminStudents"]);
-        toast({
-          title: "Student Deleted",
-          description: "The student has been successfully deleted.",
-        });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to delete student",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const deleteStudentMutation = useMutation({
+    mutationFn: (id: number) => adminAPI.deleteStudent(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminStudents"] });
+      toast({
+        title: "Student Deleted",
+        description: "The student has been successfully deleted.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to delete student",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Mutations for Fee Components
-  const addFeeComponentMutation = useMutation(
-    (data: Omit<FeeComponent, "id">) => adminAPI.addFeeComponent(data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeComponents"]);
-        toast({
-          title: "Fee Component Added",
-          description: "The fee component has been successfully added.",
-        });
-        setIsFeeComponentDialogOpen(false);
-        setFeeComponentForm({ name: '', amount: 0 });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to add fee component",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const addFeeComponentMutation = useMutation({
+    mutationFn: (data: Omit<FeeComponent, "id">) => adminAPI.addFeeComponent(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeComponents"] });
+      toast({
+        title: "Fee Component Added",
+        description: "The fee component has been successfully added.",
+      });
+      setIsFeeComponentDialogOpen(false);
+      setFeeComponentForm({ name: '', amount: 0 });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to add fee component",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const updateFeeComponentMutation = useMutation(
-    (variables: { id: number; data: Partial<Omit<FeeComponent, "id">> }) =>
+  const updateFeeComponentMutation = useMutation({
+    mutationFn: (variables: { id: number; data: Partial<Omit<FeeComponent, "id">> }) =>
       adminAPI.updateFeeComponent(variables.id, variables.data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeComponents"]);
-        queryClient.invalidateQueries(["feeTemplates"]);
-        toast({
-          title: "Fee Component Updated",
-          description: "The fee component has been successfully updated.",
-        });
-        setIsFeeComponentDialogOpen(false);
-        setCurrentFeeComponent(null);
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to update fee component",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeComponents"] });
+      queryClient.invalidateQueries({ queryKey: ["feeTemplates"] });
+      toast({
+        title: "Fee Component Updated",
+        description: "The fee component has been successfully updated.",
+      });
+      setIsFeeComponentDialogOpen(false);
+      setCurrentFeeComponent(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update fee component",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const deleteFeeComponentMutation = useMutation(
-    (id: number) => adminAPI.deleteFeeComponent(id),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeComponents"]);
-        queryClient.invalidateQueries(["feeTemplates"]);
-        toast({
-          title: "Fee Component Deleted",
-          description: "The fee component has been successfully deleted.",
-        });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to delete fee component",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const deleteFeeComponentMutation = useMutation({
+    mutationFn: (id: number) => adminAPI.deleteFeeComponent(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeComponents"] });
+      queryClient.invalidateQueries({ queryKey: ["feeTemplates"] });
+      toast({
+        title: "Fee Component Deleted",
+        description: "The fee component has been successfully deleted.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to delete fee component",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Mutations for Fee Templates
-  const addFeeTemplateMutation = useMutation(
-    (data: Omit<FeeTemplate, "id" | "components">) => adminAPI.addFeeTemplate(data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeTemplates"]);
-        toast({
-          title: "Fee Template Added",
-          description: "The fee template has been successfully added.",
-        });
-        setIsFeeTemplateDialogOpen(false);
-        setFeeTemplateForm({ name: '', dept: '', semester: 1, component_ids: [] });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to add fee template",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const addFeeTemplateMutation = useMutation({
+    mutationFn: (data: Omit<FeeTemplate, "id" | "components">) => adminAPI.addFeeTemplate(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeTemplates"] });
+      toast({
+        title: "Fee Template Added",
+        description: "The fee template has been successfully added.",
+      });
+      setIsFeeTemplateDialogOpen(false);
+      setFeeTemplateForm({ name: '', dept: '', semester: 1, component_ids: [] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to add fee template",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const updateFeeTemplateMutation = useMutation(
-    (variables: { id: number; data: Partial<Omit<FeeTemplate, "id" | "components">> }) =>
+  const updateFeeTemplateMutation = useMutation({
+    mutationFn: (variables: { id: number; data: Partial<Omit<FeeTemplate, "id" | "components">> }) =>
       adminAPI.updateFeeTemplate(variables.id, variables.data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeTemplates"]);
-        queryClient.invalidateQueries(["feeAssignments"]); // Assignments might use this template
-        toast({
-          title: "Fee Template Updated",
-          description: "The fee template has been successfully updated.",
-        });
-        setIsFeeTemplateDialogOpen(false);
-        setCurrentFeeTemplate(null);
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to update fee template",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeTemplates"] });
+      queryClient.invalidateQueries({ queryKey: ["feeAssignments"] }); // Assignments might use this template
+      toast({
+        title: "Fee Template Updated",
+        description: "The fee template has been successfully updated.",
+      });
+      setIsFeeTemplateDialogOpen(false);
+      setCurrentFeeTemplate(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update fee template",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const deleteFeeTemplateMutation = useMutation(
-    (id: number) => adminAPI.deleteFeeTemplate(id),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeTemplates"]);
-        queryClient.invalidateQueries(["feeAssignments"]);
-        toast({
-          title: "Fee Template Deleted",
-          description: "The fee template has been successfully deleted.",
-        });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to delete fee template",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const deleteFeeTemplateMutation = useMutation({
+    mutationFn: (id: number) => adminAPI.deleteFeeTemplate(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeTemplates"] });
+      queryClient.invalidateQueries({ queryKey: ["feeAssignments"] });
+      toast({
+        title: "Fee Template Deleted",
+        description: "The fee template has been successfully deleted.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to delete fee template",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Mutations for Fee Assignments
-  const addFeeAssignmentMutation = useMutation(
-    (data: Omit<FeeAssignment, "id">) => adminAPI.addFeeAssignment(data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeAssignments"]);
-        queryClient.invalidateQueries(["studentDashboard"]);
-        queryClient.invalidateQueries(["adminInvoices"]); // New invoice created
-        queryClient.invalidateQueries(["outstandingReports"]); // Potentially affects outstanding reports
-        toast({
-          title: "Fee Assignment Added",
-          description: "The fee assignment has been successfully added and an invoice generated.",
-        });
-        setIsFeeAssignmentDialogOpen(false);
-        setFeeAssignmentForm({ student: "", template: "", overrides: "{}" });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to add fee assignment",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const addFeeAssignmentMutation = useMutation({
+    mutationFn: (data: Omit<FeeAssignment, "id">) => adminAPI.addFeeAssignment(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeAssignments"] });
+      queryClient.invalidateQueries({ queryKey: ["studentDashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["adminInvoices"] }); // New invoice created
+      queryClient.invalidateQueries({ queryKey: ["outstandingReports"] }); // Potentially affects outstanding reports
+      toast({
+        title: "Fee Assignment Added",
+        description: "The fee assignment has been successfully added and an invoice generated.",
+      });
+      setIsFeeAssignmentDialogOpen(false);
+      setFeeAssignmentForm({ student: "", template: "", overrides: "{}" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to add fee assignment",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const updateFeeAssignmentMutation = useMutation(
-    (variables: { id: number; data: Partial<FeeAssignment> }) =>
+  const updateFeeAssignmentMutation = useMutation({
+    mutationFn: (variables: { id: number; data: Partial<FeeAssignment> }) =>
       adminAPI.updateFeeAssignment(variables.id, variables.data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeAssignments"]);
-        queryClient.invalidateQueries(["studentDashboard"]);
-        queryClient.invalidateQueries(["adminInvoices"]);
-        queryClient.invalidateQueries(["outstandingReports"]);
-        toast({
-          title: "Fee Assignment Updated",
-          description: "The fee assignment has been successfully updated.",
-        });
-        setIsFeeAssignmentDialogOpen(false);
-        setCurrentFeeAssignment(null);
-        setFeeAssignmentForm({ student: "", template: "", overrides: "{}" });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to update fee assignment",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeAssignments"] });
+      queryClient.invalidateQueries({ queryKey: ["studentDashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["adminInvoices"] });
+      queryClient.invalidateQueries({ queryKey: ["outstandingReports"] });
+      toast({
+        title: "Fee Assignment Updated",
+        description: "The fee assignment has been successfully updated.",
+      });
+      setIsFeeAssignmentDialogOpen(false);
+      setCurrentFeeAssignment(null);
+      setFeeAssignmentForm({ student: "", template: "", overrides: "{}" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update fee assignment",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const deleteFeeAssignmentMutation = useMutation(
-    (id: number) => adminAPI.deleteFeeAssignment(id),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["feeAssignments"]);
-        queryClient.invalidateQueries(["studentDashboard"]);
-        queryClient.invalidateQueries(["adminInvoices"]);
-        queryClient.invalidateQueries(["outstandingReports"]);
-        toast({
-          title: "Fee Assignment Deleted",
-          description: "The fee assignment has been successfully deleted.",
-        });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to delete fee assignment",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const deleteFeeAssignmentMutation = useMutation({
+    mutationFn: (id: number) => adminAPI.deleteFeeAssignment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeAssignments"] });
+      queryClient.invalidateQueries({ queryKey: ["studentDashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["adminInvoices"] });
+      queryClient.invalidateQueries({ queryKey: ["outstandingReports"] });
+      toast({
+        title: "Fee Assignment Deleted",
+        description: "The fee assignment has been successfully deleted.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to delete fee assignment",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Mutations for Payments
-  const addOfflinePaymentMutation = useMutation(
-    (data: OfflinePaymentForm) => adminAPI.addOfflinePayment(data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(["adminPayments"]);
-        queryClient.invalidateQueries(["adminInvoices"]);
-        queryClient.invalidateQueries(["studentDashboard"]);
-        queryClient.invalidateQueries(["outstandingReports"]); // Affects outstanding amounts
-        toast({
-          title: "Offline Payment Added",
-          description: "The offline payment has been successfully recorded.",
-        });
-        setIsOfflinePaymentDialogOpen(false);
-        setOfflinePaymentForm({ invoice_id: "", amount: 0, mode: "Cash", transaction_id: "" });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Failed to add offline payment",
-          description: error.response?.data?.error || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const addOfflinePaymentMutation = useMutation({
+    mutationFn: (data: OfflinePaymentForm) => adminAPI.addOfflinePayment(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminPayments"] });
+      queryClient.invalidateQueries({ queryKey: ["adminInvoices"] });
+      queryClient.invalidateQueries({ queryKey: ["studentDashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["outstandingReports"] }); // Affects outstanding amounts
+      toast({
+        title: "Offline Payment Added",
+        description: "The offline payment has been successfully recorded.",
+      });
+      setIsOfflinePaymentDialogOpen(false);
+      setOfflinePaymentForm({ invoice_id: 0, amount: 0, mode: "Cash", transaction_id: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to add offline payment",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Handlers for Students
   const handleAddStudent = () => {
@@ -574,30 +626,74 @@ const AdminDashboard = () => {
 
   const handleSubmitFeeAssignmentForm = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const parsedOverrides = JSON.parse(feeAssignmentForm.overrides);
-      if (currentFeeAssignment) {
-        updateFeeAssignmentMutation.mutate({
-          id: currentFeeAssignment.id,
-          data: {
+    
+    if (currentStudent) {
+      // Individual fee assignment
+      try {
+        const overrides = JSON.parse(feeAssignmentForm.overrides || '{}');
+        const components: Record<string, number> = {};
+        
+        // Convert overrides to components format
+        Object.entries(overrides).forEach(([name, amount]) => {
+          if (amount > 0) {
+            components[name] = Number(amount);
+          }
+        });
+        
+        // Use the individual fee assignment API
+        adminAPI.assignIndividualFees(currentStudent.id, { components })
+          .then(() => {
+            toast({
+              title: "Individual Fees Assigned",
+              description: "Custom fee structure has been assigned successfully.",
+            });
+            setIsFeeAssignmentDialogOpen(false);
+            setCurrentStudent(null);
+            setFeeAssignmentForm({ student: "", template: "", overrides: "{}" });
+            // Refresh the individual fees tab
+            queryClient.invalidateQueries({ queryKey: ["adminStudents"] });
+          })
+          .catch((error) => {
+            toast({
+              title: "Failed to Assign Fees",
+              description: error.response?.data?.error || "An error occurred.",
+              variant: "destructive",
+            });
+          });
+      } catch (error) {
+        toast({
+          title: "Invalid Fee Data",
+          description: "Please ensure all fee amounts are valid numbers.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // Regular fee assignment with template
+      try {
+        const parsedOverrides = JSON.parse(feeAssignmentForm.overrides);
+        if (currentFeeAssignment) {
+          updateFeeAssignmentMutation.mutate({
+            id: currentFeeAssignment.id,
+            data: {
+              student: Number(feeAssignmentForm.student),
+              template: Number(feeAssignmentForm.template),
+              overrides: parsedOverrides,
+            },
+          });
+        } else {
+          addFeeAssignmentMutation.mutate({
             student: Number(feeAssignmentForm.student),
             template: Number(feeAssignmentForm.template),
             overrides: parsedOverrides,
-          },
-        });
-      } else {
-        addFeeAssignmentMutation.mutate({
-          student: Number(feeAssignmentForm.student),
-          template: Number(feeAssignmentForm.template),
-          overrides: parsedOverrides,
+          });
+        }
+      } catch (error) {
+        toast({
+          title: "Invalid Overrides JSON",
+          description: "Please ensure the overrides are valid JSON.",
+          variant: "destructive",
         });
       }
-    } catch (error) {
-      toast({
-        title: "Invalid Overrides JSON",
-        description: "Please ensure the overrides are valid JSON.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -610,7 +706,7 @@ const AdminDashboard = () => {
   // Handlers for Payments
   const handleAddOfflinePayment = () => {
     setIsOfflinePaymentDialogOpen(true);
-    setOfflinePaymentForm({ invoice_id: "", amount: 0, mode: "Cash", transaction_id: "" });
+    setOfflinePaymentForm({ invoice_id: 0, amount: 0, mode: "Cash", transaction_id: "" });
   };
 
   const handleSubmitOfflinePayment = (e: React.FormEvent) => {
@@ -620,6 +716,17 @@ const AdminDashboard = () => {
       amount: offlinePaymentForm.amount,
       mode: offlinePaymentForm.mode,
       transaction_id: offlinePaymentForm.transaction_id || undefined,
+    });
+  };
+
+  // New handler for Individual Fee Assignment
+  const handleIndividualFeeAssignment = (student: StudentProfile) => {
+    setCurrentStudent(student);
+    setIsFeeAssignmentDialogOpen(true);
+    setFeeAssignmentForm({
+      student: student.id,
+      template: "", // No template selected for individual assignment
+      overrides: "{}",
     });
   };
 
@@ -637,10 +744,11 @@ const AdminDashboard = () => {
       <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
 
       <Tabs defaultValue="students" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="students">Student Management</TabsTrigger>
           <TabsTrigger value="fee-setup">Fee Setup</TabsTrigger>
           <TabsTrigger value="fee-assignments">Fee Assignments</TabsTrigger>
+          <TabsTrigger value="individual-fees">Individual Fees</TabsTrigger>
           <TabsTrigger value="payments">Payment Tracking</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
           </TabsList>
@@ -811,9 +919,9 @@ const AdminDashboard = () => {
                 <DialogFooter>
                   <Button
                     type="submit"
-                    disabled={addStudentMutation.isLoading || updateStudentMutation.isLoading}
+                    disabled={addStudentMutation.isPending || updateStudentMutation.isPending}
                   >
-                    {(addStudentMutation.isLoading || updateStudentMutation.isLoading) && (
+                    {(addStudentMutation.isPending || updateStudentMutation.isPending) && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     {currentStudent ? "Save Changes" : "Add Student"}
@@ -850,7 +958,7 @@ const AdminDashboard = () => {
                           <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading Fee Components...
                         </TableCell>
                       </TableRow>
-                    ) : feeComponentsData && feeComponentsData.length > 0 ? (
+                    ) : Array.isArray(feeComponentsData) && feeComponentsData.length > 0 ? (
                       feeComponentsData.map((component) => (
                         <TableRow key={component.id}>
                           <TableCell>{component.name}</TableCell>
@@ -919,9 +1027,9 @@ const AdminDashboard = () => {
                 <DialogFooter>
                   <Button
                     type="submit"
-                    disabled={addFeeComponentMutation.isLoading || updateFeeComponentMutation.isLoading}
+                    disabled={addFeeComponentMutation.isPending || updateFeeComponentMutation.isPending}
                   >
-                    {(addFeeComponentMutation.isLoading || updateFeeComponentMutation.isLoading) && (
+                    {(addFeeComponentMutation.isPending || updateFeeComponentMutation.isPending) && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     {currentFeeComponent ? "Save Changes" : "Add Component"}
@@ -957,7 +1065,7 @@ const AdminDashboard = () => {
                           <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading Fee Templates...
                         </TableCell>
                       </TableRow>
-                    ) : feeTemplatesData && feeTemplatesData.length > 0 ? (
+                    ) : Array.isArray(feeTemplatesData) && feeTemplatesData.length > 0 ? (
                       feeTemplatesData.map((template) => (
                         <TableRow key={template.id}>
                           <TableCell>{template.name}</TableCell>
@@ -1070,9 +1178,9 @@ const AdminDashboard = () => {
                 <DialogFooter>
                   <Button
                     type="submit"
-                    disabled={addFeeTemplateMutation.isLoading || updateFeeTemplateMutation.isLoading}
+                    disabled={addFeeTemplateMutation.isPending || updateFeeTemplateMutation.isPending}
                   >
-                    {(addFeeTemplateMutation.isLoading || updateFeeTemplateMutation.isLoading) && (
+                    {(addFeeTemplateMutation.isPending || updateFeeTemplateMutation.isPending) && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     {currentFeeTemplate ? "Save Changes" : "Create Template"}
@@ -1110,7 +1218,7 @@ const AdminDashboard = () => {
                           <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading Fee Assignments...
                         </TableCell>
                       </TableRow>
-                    ) : feeAssignmentsData && feeAssignmentsData.length > 0 ? (
+                    ) : Array.isArray(feeAssignmentsData) && feeAssignmentsData.length > 0 ? (
                       feeAssignmentsData.map((assignment) => (
                         <TableRow key={assignment.id}>
                           <TableCell>
@@ -1160,11 +1268,14 @@ const AdminDashboard = () => {
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
                 <DialogTitle>
-                  {currentFeeAssignment ? "Edit Fee Assignment" : "Assign Fee Template to Student"}
+                  {currentFeeAssignment ? "Edit Fee Assignment" : 
+                   currentStudent ? "Assign Individual Fees to Student" : "Assign Fee Template to Student"}
                 </DialogTitle>
                 <DialogDescription>
                   {currentFeeAssignment
                     ? "Edit the fee assignment details."
+                    : currentStudent
+                    ? "Set custom fee amounts for individual components for this student."
                     : "Select a student and a fee template to assign fees."}
                 </DialogDescription>
               </DialogHeader>
@@ -1174,7 +1285,7 @@ const AdminDashboard = () => {
                   <Select
                     value={String(feeAssignmentForm.student)}
                     onValueChange={(value) => setFeeAssignmentForm({ ...feeAssignmentForm, student: Number(value) })}
-                    disabled={!!currentFeeAssignment} // Disable student selection when editing
+                    disabled={!!currentFeeAssignment || !!currentStudent} // Disable when editing or individual assignment
                     required
                   >
                     <SelectTrigger>
@@ -1188,54 +1299,157 @@ const AdminDashboard = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  </div>
-                <div className="space-y-2">
-                  <Label htmlFor="assign-template">Fee Template</Label>
-                  <Select
-                    value={String(feeAssignmentForm.template)}
-                    onValueChange={(value) => setFeeAssignmentForm({ ...feeAssignmentForm, template: Number(value) })}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a fee template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {feeTemplatesData?.map((template) => (
-                        <SelectItem key={template.id} value={String(template.id)}>
-                          {template.name} ({template.dept} - Sem {template.semester})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-            </div>
-                <div className="space-y-2">
-                  <Label htmlFor="assign-overrides">Overrides (JSON)</Label>
-                  <Textarea
-                    id="assign-overrides"
-                    placeholder="{}" 
-                    value={feeAssignmentForm.overrides}
-                    onChange={(e) => setFeeAssignmentForm({ ...feeAssignmentForm, overrides: e.target.value })}
-                    className="min-h-[100px]"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Enter a JSON object for component overrides. E.g., &lbrace;"1": 5000, "3": 2000&rbrace;
-                  </p>
                 </div>
+                
+                {!currentStudent && (
+                  <div className="space-y-2">
+                    <Label htmlFor="assign-template">Fee Template</Label>
+                    <Select
+                      value={String(feeAssignmentForm.template)}
+                      onValueChange={(value) => setFeeAssignmentForm({ ...feeAssignmentForm, template: Number(value) })}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a fee template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.isArray(feeTemplatesData) && feeTemplatesData.map((template) => (
+                          <SelectItem key={template.id} value={String(template.id)}>
+                            {template.name} ({template.dept} - Sem {template.semester})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                {currentStudent ? (
+                  <div className="space-y-2">
+                    <Label>Individual Fee Components</Label>
+                    <div className="space-y-3">
+                      {feeComponentsData?.map((component) => (
+                        <div key={component.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <span className="font-medium">{component.name}</span>
+                            <span className="text-sm text-muted-foreground ml-2">(Default: ₹{component.amount.toLocaleString()})</span>
+                          </div>
+                          <Input
+                            type="number"
+                            placeholder="Custom amount"
+                            className="w-32"
+                            onChange={(e) => {
+                              const amount = Number(e.target.value);
+                              const overrides = JSON.parse(feeAssignmentForm.overrides || '{}');
+                              if (amount > 0) {
+                                overrides[component.name] = amount;
+                              } else {
+                                delete overrides[component.name];
+                              }
+                              setFeeAssignmentForm({
+                                ...feeAssignmentForm,
+                                overrides: JSON.stringify(overrides)
+                              });
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Enter custom amounts for each fee component. Leave empty to use default amounts.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="assign-overrides">Overrides (JSON)</Label>
+                    <Textarea
+                      id="assign-overrides"
+                      placeholder="{}" 
+                      value={feeAssignmentForm.overrides}
+                      onChange={(e) => setFeeAssignmentForm({ ...feeAssignmentForm, overrides: e.target.value })}
+                      className="min-h-[100px]"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Enter a JSON object for component overrides. E.g., &lbrace;"1": 5000, "3": 2000&rbrace;
+                    </p>
+                  </div>
+                )}
+                
                 <DialogFooter>
                   <Button
                     type="submit"
-                    disabled={addFeeAssignmentMutation.isLoading || updateFeeAssignmentMutation.isLoading}
+                    disabled={addFeeAssignmentMutation.isPending || updateFeeAssignmentMutation.isPending}
                   >
-                    {(addFeeAssignmentMutation.isLoading || updateFeeAssignmentMutation.isLoading) && (
+                    {(addFeeAssignmentMutation.isPending || updateFeeAssignmentMutation.isPending) && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
-                    {currentFeeAssignment ? "Save Changes" : "Assign Fee"}
+                    {currentFeeAssignment ? "Save Changes" : 
+                     currentStudent ? "Assign Individual Fees" : "Assign Fee"}
                   </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
           </Dialog>
           </TabsContent>
+
+        {/* Individual Fees Tab */}
+        <TabsContent value="individual-fees" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl font-bold">Individual Fee Assignment</CardTitle>
+              <CardDescription>
+                Assign custom fee structures to individual students. This allows you to set different fees for each student regardless of templates.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <Input
+                  placeholder="Search students by name or USN..."
+                  value={studentSearchQuery}
+                  onChange={(e) => setStudentSearchQuery(e.target.value)}
+                />
+              </div>
+              
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Student</TableHead>
+                      <TableHead>USN</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Semester</TableHead>
+                      <TableHead>Custom Fee Structure</TableHead>
+                      <TableHead>Total Amount</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingStudents ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center">
+                          <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading Students...
+                        </TableCell>
+                      </TableRow>
+                    ) : studentsData && studentsData.students.length > 0 ? (
+                      studentsData.students.map((student) => (
+                        <IndividualFeeRow 
+                          key={student.id} 
+                          student={student} 
+                          onAssignFees={() => handleIndividualFeeAssignment(student)}
+                        />
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center">
+                          No students found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Payment Tracking Tab */}
         <TabsContent value="payments" className="mt-4">
@@ -1262,7 +1476,7 @@ const AdminDashboard = () => {
                     <SelectValue placeholder="Filter by Semester" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Semesters</SelectItem>
+                    <SelectItem value="all">All Semesters</SelectItem>
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                       <SelectItem key={sem} value={String(sem)}>{`Semester ${sem}`}</SelectItem>
                     ))}
@@ -1337,7 +1551,7 @@ const AdminDashboard = () => {
                           <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading Invoices...
                         </TableCell>
                       </TableRow>
-                    ) : invoicesData && invoicesData.length > 0 ? (
+                    ) : Array.isArray(invoicesData) && invoicesData.length > 0 ? (
                       invoicesData.map((invoice) => (
                         <TableRow key={invoice.id}>
                           <TableCell>{invoice.id}</TableCell>
@@ -1385,7 +1599,7 @@ const AdminDashboard = () => {
                       <SelectValue placeholder="Select an invoice" />
                     </SelectTrigger>
                     <SelectContent>
-                      {invoicesData?.map((invoice) => (
+                      {Array.isArray(invoicesData) && invoicesData.map((invoice) => (
                         <SelectItem key={invoice.id} value={String(invoice.id)}>
                           Invoice #{invoice.id} - {getStudentName(invoice.student_id)} (Bal: ₹{invoice.balance_amount.toLocaleString()})
                         </SelectItem>
@@ -1425,9 +1639,9 @@ const AdminDashboard = () => {
                 <DialogFooter>
                   <Button
                     type="submit"
-                    disabled={addOfflinePaymentMutation.isLoading}
+                    disabled={addOfflinePaymentMutation.isPending}
                   >
-                    {addOfflinePaymentMutation.isLoading && (
+                    {addOfflinePaymentMutation.isPending && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     Add Payment
@@ -1454,7 +1668,7 @@ const AdminDashboard = () => {
                     <SelectValue placeholder="Filter by Department" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Departments</SelectItem>
+                    <SelectItem value="all">All Departments</SelectItem>
                     {/* Assuming departments are dynamic, hardcoding for now */}
                     <SelectItem value="CSE">CSE</SelectItem>
                     <SelectItem value="ECE">ECE</SelectItem>
@@ -1469,7 +1683,7 @@ const AdminDashboard = () => {
                     <SelectValue placeholder="Filter by Semester" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Semesters</SelectItem>
+                    <SelectItem value="all">All Semesters</SelectItem>
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                       <SelectItem key={sem} value={String(sem)}>{`Semester ${sem}`}</SelectItem>
                     ))}
@@ -1501,7 +1715,7 @@ const AdminDashboard = () => {
                           <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading Reports...
                         </TableCell>
                       </TableRow>
-                    ) : outstandingReportsData && outstandingReportsData.outstanding_invoices.length > 0 ? (
+                    ) : outstandingReportsData && outstandingReportsData.outstanding_invoices && outstandingReportsData.outstanding_invoices.length > 0 ? (
                       outstandingReportsData.outstanding_invoices.map((invoice) => (
                         <TableRow key={invoice.invoice_id}>
                           <TableCell>{invoice.invoice_id}</TableCell>
