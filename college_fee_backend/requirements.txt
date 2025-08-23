@@ -1,6 +1,7 @@
-django>=3.1
-djangorestframework
-djangorestframework-simplejwt
-python-dotenv
-stripe
-xhtml2pdf
+django==4.2.11
+djangorestframework==3.15.1
+djangorestframework-simplejwt==5.3.1
+python-dotenv==1.0.1
+stripe==9.3.0
+xhtml2pdf==0.2.11
+django-cors-headers==4.3.1
