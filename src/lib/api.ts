@@ -91,6 +91,40 @@ interface StudentDashboardData {
   invoices: Invoice[];
 }
 
+// Stripe-related interfaces
+interface CheckoutSessionResponse {
+  checkout_url: string;
+  session_id: string;
+  payment_id: number;
+  amount: number;
+  expires_at?: number;
+}
+
+interface PaymentStatusResponse {
+  payment_id: number;
+  session_id: string;
+  payment_status: 'paid' | 'unpaid' | 'no_payment_required';
+  amount_total: number;
+  currency: string;
+  customer_email?: string;
+  created: number;
+  expires_at?: number;
+  invoice_id: number;
+  status: 'pending' | 'success' | 'failed' | 'refunded';
+}
+
+interface RefundRequest {
+  amount?: number;
+  reason?: string;
+}
+
+interface RefundResponse {
+  refund_id: string;
+  amount: number;
+  status: string;
+  reason: string;
+}
+
 interface AuthResponse {
   refresh: string;
   access: string;
@@ -230,7 +264,14 @@ const authAPI = {
 const studentAPI = {
   getDashboard: () => api.get<StudentDashboardData>('/api/student/dashboard/').then(res => res.data),
   updateProfile: (data: Partial<StudentProfile>) => api.patch<StudentProfile>('/api/student/profile/edit/', data).then(res => res.data),
-  createCheckoutSession: (invoiceId: number, amount: number) => api.post<{ checkout_url: string }>(`/invoices/${invoiceId}/create-checkout-session/`, { amount }).then(res => res.data),
+  
+  // Enhanced Stripe payment methods
+  createCheckoutSession: (invoiceId: number, amount?: number) => 
+    api.post<CheckoutSessionResponse>(`/invoices/${invoiceId}/create-checkout-session/`, { amount }).then(res => res.data),
+  
+  getPaymentStatus: (sessionId: string) => 
+    api.get<PaymentStatusResponse>(`/payments/${sessionId}/status/`).then(res => res.data),
+  
   getPayments: () => api.get<{ payments: Payment[] }>('/api/student/payments/').then(res => res.data),
   getReceipt: (paymentId: number) => api.get(`/api/student/payments/${paymentId}/receipt/`, { responseType: 'arraybuffer' }),
   getNotifications: () => api.get<{ notifications: Notification[] }>('/notifications/').then(res => res.data),
@@ -276,6 +317,9 @@ const adminAPI = {
   // Payments
   getPayments: (studentId?: number) => api.get<{ payments: Payment[] }>(`/payments/`, { params: { student_id: studentId } }).then(res => res.data.payments),
   addOfflinePayment: (data: { invoice_id: number; amount: number; mode: string; transaction_id?: string }) => api.post<Payment>(`/payments/offline/`, data).then(res => res.data),
+  
+  // Enhanced Stripe Admin Functions
+  refundPayment: (paymentId: number, data: RefundRequest) => api.post<RefundResponse>(`/payments/${paymentId}/refund/`, data).then(res => res.data),
 
   // Reports
   getOutstandingReports: (dept?: string, semester?: number) => api.get<{
@@ -314,5 +358,9 @@ export type {
   Receipt,
   OutstandingReport,
   CollectionsReport,
-  HODReport
+  HODReport,
+  CheckoutSessionResponse,
+  PaymentStatusResponse,
+  RefundRequest,
+  RefundResponse
 };
