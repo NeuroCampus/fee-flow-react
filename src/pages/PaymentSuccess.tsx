@@ -43,9 +43,9 @@ const PaymentSuccess: React.FC = () => {
     }, 30000); // 30 seconds timeout
 
     return () => clearTimeout(timer);
-  }, [isLoading, paymentVerified]);  // Log errors for debugging
+  }, [isLoading, paymentVerified]);  // Re-run effect when loading or payment verification state changes
+  // Log errors for debugging
   useEffect(() => {
-    if (error) {
       console.error('Payment status query error:', error);
     }
     if (paymentStatus) {
