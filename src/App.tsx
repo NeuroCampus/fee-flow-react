@@ -14,6 +14,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import HODDashboard from './pages/HODDashboard';
 import AdminLayout from './layouts/AdminLayout';
 import Dashboard from './pages/Dashboard';
+import PaymentSuccess from './pages/PaymentSuccess';
+import PaymentCancel from './pages/PaymentCancel';
 
 const queryClient = new QueryClient();
 
@@ -102,6 +104,10 @@ const RouterContent = () => {
           </ProtectedRoute>
         } 
       />
+      
+      {/* Payment Routes */}
+      <Route path="/payment/success" element={<PaymentSuccess />} />
+      <Route path="/payment/cancel" element={<PaymentCancel />} />
       
       {/* Other Routes */}
       <Route path="/unauthorized" element={<Unauthorized />} />

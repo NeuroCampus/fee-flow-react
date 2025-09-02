@@ -9,7 +9,8 @@ from .views import (
     AdminFeeTemplatesView, AdminFeeTemplateDetailView,
     AdminFeeAssignmentsView, AdminFeeAssignmentDetailView, AdminInvoicesView, AdminInvoiceDetailView,
     AdminPaymentsView, AdminOfflinePaymentView, HODStudentsView, HODReportsView,
-    CreateCheckoutSessionView, StripeWebhookView, StudentProfileUpdateView, DownloadReceiptView,
+    CreateCheckoutSessionView, StripeWebhookView, PaymentStatusView, RefundPaymentView,
+    StudentProfileUpdateView, DownloadReceiptView,
     StudentNotificationsView, StudentMarkNotificationReadView, AdminReportsView,
     AdminCustomFeeStructureView, AdminStudentFeeProfileView, AdminStudentStatusDashboardView, AdminCollectionsReportView,
     StudentProfileEditView, StudentReceiptsView, AdminIndividualFeeAssignmentView, AdminStudentFeeBreakdownView
@@ -75,8 +76,10 @@ urlpatterns = [
     path('hod/reports/', HODReportsView.as_view()),
     
     # Stripe endpoints
-    path('invoices/<int:id>/create-checkout-session/', CreateCheckoutSessionView.as_view()),
-    path('webhooks/stripe/', StripeWebhookView.as_view()),
+    path('invoices/<int:id>/create-checkout-session/', CreateCheckoutSessionView.as_view(), name='create-checkout-session'),
+    path('payments/<str:session_id>/status/', PaymentStatusView.as_view(), name='payment-status'),
+    path('payments/<int:payment_id>/refund/', RefundPaymentView.as_view(), name='refund-payment'),
+    path('webhooks/stripe/', StripeWebhookView.as_view(), name='stripe-webhook'),
     
     # Django Admin - Put this last to prevent conflicts
     path('admin/', admin.site.urls),

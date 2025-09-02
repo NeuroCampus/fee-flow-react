@@ -2,19 +2,20 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { studentAPI } from '@/lib/api';
+import { studentAPI, CheckoutSessionResponse, PaymentStatusResponse } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, Download, Eye, CreditCard, Receipt, Bell, MailOpen, User, BookOpen, GraduationCap, Check } from 'lucide-react';
+import { Loader2, Download, Eye, CreditCard, Receipt, Bell, MailOpen, User, BookOpen, GraduationCap, Check, AlertCircle } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDistanceToNow } from 'date-fns';
 import { config } from '@/config/env';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Initialize Stripe with error handling
 const stripePromise = (() => {
@@ -87,9 +88,9 @@ const StudentDashboard: React.FC = () => {
   });
 
   const createCheckoutSessionMutation = useMutation({
-    mutationFn: ({ invoiceId, amount }: { invoiceId: number; amount: number }) =>
+    mutationFn: ({ invoiceId, amount }: { invoiceId: number; amount?: number }) =>
       studentAPI.createCheckoutSession(invoiceId, amount),
-    onSuccess: async (data) => {
+    onSuccess: async (data: CheckoutSessionResponse) => {
       if (!stripePromise) {
         toast({
           title: "Payment Configuration Error",
@@ -101,8 +102,9 @@ const StudentDashboard: React.FC = () => {
       
       try {
         const stripe = await stripePromise;
-        if (stripe) {
-          await stripe.redirectToCheckout({ sessionId: data.data.checkout_url });
+        if (stripe && data.checkout_url) {
+          // Redirect to Stripe checkout
+          window.location.href = data.checkout_url;
         }
       } catch (error) {
         toast({
@@ -168,7 +170,7 @@ const StudentDashboard: React.FC = () => {
     updateProfileMutation.mutate({ name, email });
   };
 
-  const handlePayNow = async (invoiceId: number, amount: number) => {
+  const handlePayNow = async (invoiceId: number, amount?: number) => {
     createCheckoutSessionMutation.mutate({
       invoiceId,
       amount,
@@ -270,7 +272,7 @@ const StudentDashboard: React.FC = () => {
             <div className="flex justify-end gap-2">
               {isEditing ? (
                 <>
-                  <Button variant="outline" onClick={() => setIsEditing(false)} disabled={updateProfileMutation.isLoading}>
+                  <Button variant="outline" onClick={() => setIsEditing(false)} disabled={updateProfileMutation.isPending}>
                     Cancel
                   </Button>
                   <Button onClick={handleUpdate} disabled={updateProfileMutation.isPending}>

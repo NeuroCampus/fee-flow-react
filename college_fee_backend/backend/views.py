@@ -817,8 +817,10 @@ class CreateCheckoutSessionView(APIView):
         try:
             invoice = Invoice.objects.get(id=id)
             student = StudentProfile.objects.get(user=request.user)
+            
+            # Verify the invoice belongs to the student
             if invoice.student != student:
-                return JsonResponse({'error': 'Unauthorized'}, status=403)
+                return JsonResponse({'error': 'Unauthorized access to invoice'}, status=403)
             
             # Get payment amount (default to balance amount)
             amount = request.data.get('amount', float(invoice.balance_amount))
@@ -829,8 +831,17 @@ class CreateCheckoutSessionView(APIView):
             if amount > float(invoice.balance_amount):
                 return JsonResponse({'error': 'Amount cannot exceed balance amount'}, status=400)
             
+            # Prepare student info for Stripe
+            student_info = {
+                'name': student.name,
+                'usn': student.usn,
+                'email': request.user.email,
+                'dept': student.dept,
+                'semester': student.semester
+            }
+            
             # Create Stripe checkout session
-            session = create_checkout_session(id, amount)
+            session = create_checkout_session(id, amount, student_info)
             
             # Create pending payment record
             payment = Payment.objects.create(
@@ -841,61 +852,244 @@ class CreateCheckoutSessionView(APIView):
                 status='pending'
             )
             
+            # Create notification about payment initiation
+            Notification.objects.create(
+                user=request.user,
+                message=f"Payment of ₹{amount} initiated for Invoice #{invoice.id}. Complete the payment to proceed.",
+                is_read=False
+            )
+            
             return JsonResponse({
                 'checkout_url': session.url,
+                'session_id': session.id,
                 'payment_id': payment.id,
-                'amount': amount
+                'amount': amount,
+                'expires_at': session.expires_at
             })
+            
+        except Invoice.DoesNotExist:
+            return JsonResponse({'error': 'Invoice not found'}, status=404)
+        except StudentProfile.DoesNotExist:
+            return JsonResponse({'error': 'Student profile not found'}, status=404)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
+class PaymentStatusView(APIView):
+    """View to check payment status"""
+    permission_classes = []  # Allow public access for payment verification
+    
+    def get(self, request, session_id):
+        from .stripe_service import retrieve_checkout_session
+        try:
+            # Get session details from Stripe first
+            session_data = retrieve_checkout_session(session_id)
+            
+            if not session_data:
+                return JsonResponse({'error': 'Invalid session ID'}, status=404)
+            
+            # Try to find the payment in our database
+            payment = Payment.objects.filter(transaction_id=session_id).first()
+            
+            # If we have a user context, validate ownership
+            if request.user.is_authenticated:
+                try:
+                    student = StudentProfile.objects.get(user=request.user)
+                    if payment and payment.invoice.student != student:
+                        return JsonResponse({'error': 'Unauthorized access to payment'}, status=403)
+                except StudentProfile.DoesNotExist:
+                    pass  # Non-student users (admin, etc.) can view any payment
+            
+            # Return Stripe session data (this is safe for public access since it only contains payment status)
+            session = retrieve_checkout_session(session_id)
+            
+            if not session:
+                return JsonResponse({'error': 'Session not found in Stripe'}, status=404)
+            
+            # Auto-update payment status if Stripe shows completed but our DB shows pending
+            if payment and session.payment_status == 'paid' and payment.status == 'pending':
+                try:
+                    # Simulate the webhook call to properly update payment status
+                    webhook_view = StripeWebhookView()
+                    session_dict = {
+                        'id': session.id,
+                        'payment_status': session.payment_status,
+                        'amount_total': session.amount_total,
+                        'customer': session.customer,
+                        'metadata': session.metadata if hasattr(session, 'metadata') else {}
+                    }
+                    webhook_view.handle_checkout_session_completed(session_dict)
+                    
+                    # Refresh the payment object from database
+                    payment.refresh_from_db()
+                    logger.info(f"Auto-updated payment {payment.id} status to {payment.status} based on Stripe session")
+                    
+                except Exception as e:
+                    logger.error(f"Error auto-updating payment status: {str(e)}")
+            
+            response_data = {
+                'session_id': session_id,
+                'payment_status': session.payment_status,
+                'amount_total': session.amount_total / 100,  # Convert from paise to rupees
+                'currency': session.currency,
+                'customer_email': session.customer_details.email if session.customer_details else None,
+                'created': session.created,
+                'expires_at': session.expires_at,
+            }
+            
+            # Add payment info if available
+            if payment:
+                response_data.update({
+                    'payment_id': payment.id,
+                    'invoice_id': payment.invoice.id,
+                    'status': payment.status
+                })
+            else:
+                # Extract invoice ID from session metadata if payment not found
+                invoice_id = None
+                if hasattr(session, 'metadata') and session.metadata:
+                    invoice_id = session.metadata.get('invoice_id')
+                elif hasattr(session, 'line_items'):
+                    # Try to extract from line items metadata
+                    line_items = session.list_line_items(session.id, limit=1)
+                    if line_items.data:
+                        product = line_items.data[0].price.product
+                        if hasattr(product, 'metadata'):
+                            invoice_id = product.metadata.get('invoice_id')
+                
+                response_data.update({
+                    'payment_id': None,
+                    'invoice_id': invoice_id,
+                    'status': 'pending'
+                })
+            
+            return JsonResponse(response_data)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving payment status: {str(e)}")
+            return JsonResponse({'error': 'Failed to retrieve payment status'}, status=500)
+
 @method_decorator(csrf_exempt, name='dispatch')
 class StripeWebhookView(APIView):
+    permission_classes = []  # No authentication required for webhooks
+    
     def post(self, request):
+        from .stripe_service import verify_webhook_signature
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+        
         try:
-            event = stripe.Webhook.construct_event(
+            event = verify_webhook_signature(
                 payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
             )
-        except (ValueError, stripe.error.SignatureVerificationError):
-            return HttpResponse(status=400)
+        except Exception as e:
+            return HttpResponse(f'Webhook error: {str(e)}', status=400)
         
+        # Handle the event
         if event['type'] == 'checkout.session.completed':
             session = event['data']['object']
-            try:
-                payment = Payment.objects.get(transaction_id=session.id)
+            self.handle_checkout_session_completed(session)
+            
+        elif event['type'] == 'payment_intent.succeeded':
+            payment_intent = event['data']['object']
+            self.handle_payment_intent_succeeded(payment_intent)
+            
+        elif event['type'] == 'payment_intent.payment_failed':
+            payment_intent = event['data']['object']
+            self.handle_payment_intent_failed(payment_intent)
+            
+        elif event['type'] == 'invoice.payment_succeeded':
+            invoice = event['data']['object']
+            self.handle_invoice_payment_succeeded(invoice)
+            
+        else:
+            print(f'Unhandled event type: {event["type"]}')
+        
+        return HttpResponse(status=200)
+    
+    def handle_checkout_session_completed(self, session):
+        """Handle successful checkout session completion"""
+        try:
+            payment = Payment.objects.get(transaction_id=session['id'])
+            payment.status = 'success'
+            payment.save()
+            
+            # Allocate payment to invoice components
+            self.allocate_payment_to_components(payment, float(payment.amount))
+            
+            # Update invoice
+            invoice = payment.invoice
+            if not invoice:
+                print(f"Payment {payment.id} has no associated invoice")
+                return
+                
+            invoice.paid_amount += payment.amount
+            invoice.balance_amount -= payment.amount
+            invoice.status = 'paid' if invoice.balance_amount <= 0 else 'partial'
+            invoice.save()
+            
+            # Create success notification for student
+            if invoice.student and invoice.student.user:
+                Notification.objects.create(
+                    user=invoice.student.user,
+                    message=f"Payment of ₹{payment.amount} received successfully on {payment.timestamp.strftime('%d-%b-%Y')}. Pending amount: ₹{invoice.balance_amount}",
+                    is_read=False
+                )
+            
+            # Generate and send receipt automatically
+            self.generate_and_send_receipt(payment)
+            
+        except Payment.DoesNotExist:
+            print(f"Payment not found for session {session.id}")
+        except Exception as e:
+            print(f"Error handling checkout session completed: {str(e)}")
+    
+    def handle_payment_intent_succeeded(self, payment_intent):
+        """Handle successful payment intent"""
+        try:
+            # Find payment by payment intent ID
+            payment = Payment.objects.filter(
+                transaction_id=payment_intent.id
+            ).first()
+            
+            if payment:
                 payment.status = 'success'
                 payment.save()
+                print(f"Payment intent succeeded: {payment_intent.id}")
                 
-                # Allocate payment to invoice components
-                self.allocate_payment_to_components(payment, float(payment.amount))
+        except Exception as e:
+            print(f"Error handling payment intent succeeded: {str(e)}")
+    
+    def handle_payment_intent_failed(self, payment_intent):
+        """Handle failed payment intent"""
+        try:
+            # Find payment by payment intent ID
+            payment = Payment.objects.filter(
+                transaction_id=payment_intent.id
+            ).first()
+            
+            if payment:
+                payment.status = 'failed'
+                payment.save()
                 
-                # Update invoice
-                invoice = payment.invoice
-                if not invoice:
-                    print(f"Payment {payment.id} has no associated invoice")
-                    return HttpResponse(status=400)
-                    
-                invoice.paid_amount += payment.amount
-                invoice.balance_amount -= payment.amount
-                invoice.status = 'paid' if invoice.balance_amount <= 0 else 'partial'
-                invoice.save()
-                
-                # Create success notification for student
-                if invoice.student and invoice.student.user:
+                # Create failure notification
+                if payment.invoice and payment.invoice.student and payment.invoice.student.user:
                     Notification.objects.create(
-                        user=invoice.student.user,
-                        message=f"Payment of ₹{payment.amount} received successfully on {payment.timestamp.strftime('%d-%b-%Y')}. Pending amount: ₹{invoice.balance_amount}",
+                        user=payment.invoice.student.user,
+                        message=f"Payment of ₹{payment.amount} failed. Please try again or contact support.",
                         is_read=False
                     )
+                    
+                print(f"Payment intent failed: {payment_intent.id}")
                 
-                # Generate and send receipt automatically
-                self.generate_and_send_receipt(payment)
-                
-            except Payment.DoesNotExist:
-                return HttpResponse(status=400)
-        return HttpResponse(status=200)
+        except Exception as e:
+            print(f"Error handling payment intent failed: {str(e)}")
+    
+    def handle_invoice_payment_succeeded(self, stripe_invoice):
+        """Handle Stripe invoice payment succeeded"""
+        try:
+            print(f"Stripe invoice payment succeeded: {stripe_invoice.id}")
+        except Exception as e:
+            print(f"Error handling invoice payment succeeded: {str(e)}")
     
     def generate_and_send_receipt(self, payment):
         """Generate receipt and send to student after successful payment"""
@@ -1039,6 +1233,63 @@ class StripeWebhookView(APIView):
                     
         except Exception as e:
             print(f"Error saving receipt PDF: {e}")
+
+class RefundPaymentView(APIView):
+    """Admin view to create refunds"""
+    permission_classes = [IsAdminUser]
+    
+    def post(self, request, payment_id):
+        from .stripe_service import create_refund
+        try:
+            payment = Payment.objects.get(id=payment_id)
+            
+            if payment.status != 'success':
+                return JsonResponse({'error': 'Only successful payments can be refunded'}, status=400)
+            
+            refund_amount = request.data.get('amount', float(payment.amount))
+            reason = request.data.get('reason', 'Admin initiated refund')
+            
+            # Validate refund amount
+            if refund_amount <= 0 or refund_amount > float(payment.amount):
+                return JsonResponse({'error': 'Invalid refund amount'}, status=400)
+            
+            # Create refund in Stripe
+            refund = create_refund(
+                payment.transaction_id,
+                refund_amount,
+                reason
+            )
+            
+            # Update payment status
+            payment.status = 'refunded'
+            payment.save()
+            
+            # Update invoice amounts
+            invoice = payment.invoice
+            invoice.paid_amount -= refund_amount
+            invoice.balance_amount += refund_amount
+            invoice.status = 'partial' if invoice.balance_amount > 0 else 'paid'
+            invoice.save()
+            
+            # Create notification
+            if invoice.student and invoice.student.user:
+                Notification.objects.create(
+                    user=invoice.student.user,
+                    message=f"Refund of ₹{refund_amount} processed for payment #{payment.id}. Reason: {reason}",
+                    is_read=False
+                )
+            
+            return JsonResponse({
+                'refund_id': refund.id,
+                'amount': refund_amount,
+                'status': refund.status,
+                'reason': reason
+            })
+            
+        except Payment.DoesNotExist:
+            return JsonResponse({'error': 'Payment not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
 
 class AdminCustomFeeStructureView(APIView):
     permission_classes = [IsAdminUser]
