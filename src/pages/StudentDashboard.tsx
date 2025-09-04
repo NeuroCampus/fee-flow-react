@@ -2,13 +2,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { studentAPI, CheckoutSessionResponse, PaymentStatusResponse } from '@/lib/api';
+import { studentAPI, CheckoutSessionResponse, PaymentStatusResponse, InvoiceComponent, ComponentPaymentRequest } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, Download, Eye, CreditCard, Receipt, Bell, MailOpen, User, BookOpen, GraduationCap, Check, AlertCircle } from 'lucide-react';
+import { Loader2, Download, Eye, CreditCard, Receipt, Bell, MailOpen, User, BookOpen, GraduationCap, Check, AlertCircle, Plus, Minus } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDistanceToNow } from 'date-fns';
@@ -16,6 +16,8 @@ import { config } from '@/config/env';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 // Initialize Stripe with error handling
 const stripePromise = (() => {
@@ -33,6 +35,12 @@ const StudentDashboard: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+
+  // Component selection states
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
+  const [selectedComponents, setSelectedComponents] = useState<{[key: number]: {selected: boolean, amount: number}}>({});
+  const [isComponentDialogOpen, setIsComponentDialogOpen] = useState(false);
+  const [customAmounts, setCustomAmounts] = useState<{[key: number]: number}>({});
 
   const { data: dashboardData, isLoading: isDashboardLoading, error: dashboardError } = useQuery({
     queryKey: ['studentDashboard'],
@@ -56,6 +64,13 @@ const StudentDashboard: React.FC = () => {
     queryKey: ['studentReceipts'],
     queryFn: studentAPI.getReceipts,
     enabled: !!user && user.role === 'student',
+  });
+
+  // Component selection query
+  const { data: invoiceComponents, isLoading: isComponentsLoading } = useQuery({
+    queryKey: ['invoiceComponents', selectedInvoiceId],
+    queryFn: () => selectedInvoiceId ? studentAPI.getInvoiceComponents(selectedInvoiceId) : Promise.resolve(null),
+    enabled: !!selectedInvoiceId && isComponentDialogOpen,
   });
 
   // Update form data when dashboard data loads
@@ -137,6 +152,42 @@ const StudentDashboard: React.FC = () => {
     },
   });
 
+  // Component-based payment mutation
+  const createComponentPaymentMutation = useMutation({
+    mutationFn: ({ invoiceId, data }: { invoiceId: number; data: ComponentPaymentRequest }) => 
+      studentAPI.createComponentPayment(invoiceId, data),
+    onSuccess: async (data: CheckoutSessionResponse) => {
+      if (!stripePromise) {
+        toast({
+          title: "Payment Configuration Error",
+          description: "Stripe is not properly configured. Please contact support.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      try {
+        const stripe = await stripePromise;
+        if (stripe && data.checkout_url) {
+          window.location.href = data.checkout_url;
+        }
+      } catch (error) {
+        toast({
+          title: "Payment Failed",
+          description: "An error occurred during checkout. Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Payment Failed",
+        description: error.response?.data?.error || "An error occurred during checkout.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isDashboardLoading || isPaymentsLoading || isNotificationsLoading || isReceiptsLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -204,6 +255,72 @@ const StudentDashboard: React.FC = () => {
 
   const handleMarkAsRead = (notificationId: number) => {
     markNotificationReadMutation.mutate(notificationId);
+  };
+
+  // Component selection handlers
+  const handleOpenComponentDialog = (invoiceId: number) => {
+    setSelectedInvoiceId(invoiceId);
+    setSelectedComponents({});
+    setCustomAmounts({});
+    setIsComponentDialogOpen(true);
+  };
+
+  const handleComponentSelection = (componentId: number, selected: boolean, defaultAmount: number) => {
+    setSelectedComponents(prev => ({
+      ...prev,
+      [componentId]: {
+        selected,
+        amount: selected ? (customAmounts[componentId] || defaultAmount) : 0
+      }
+    }));
+  };
+
+  const handleCustomAmountChange = (componentId: number, amount: number) => {
+    setCustomAmounts(prev => ({
+      ...prev,
+      [componentId]: amount
+    }));
+    
+    if (selectedComponents[componentId]?.selected) {
+      setSelectedComponents(prev => ({
+        ...prev,
+        [componentId]: {
+          ...prev[componentId],
+          amount
+        }
+      }));
+    }
+  };
+
+  const handleComponentPayment = () => {
+    if (!selectedInvoiceId) return;
+
+    const componentPayments = Object.entries(selectedComponents)
+      .filter(([_, data]) => data.selected)
+      .map(([componentId, data]) => ({
+        component_id: parseInt(componentId),
+        amount: data.amount
+      }));
+
+    if (componentPayments.length === 0) {
+      toast({
+        title: "No Components Selected",
+        description: "Please select at least one component to pay for.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createComponentPaymentMutation.mutate({
+      invoiceId: selectedInvoiceId,
+      data: { component_payments: componentPayments }
+    });
+  };
+
+  const getSelectedTotal = () => {
+    return Object.values(selectedComponents)
+      .filter(data => data.selected)
+      .reduce((total, data) => total + data.amount, 0);
   };
 
   const getStatusBadge = (status: string) => {
@@ -432,16 +549,27 @@ const StudentDashboard: React.FC = () => {
                     </div>
                     
                     {/* Actions */}
-                    <div className="flex justify-end mt-3">
+                    <div className="flex justify-end mt-3 space-x-2">
                       {invoice.balance_amount > 0 && (
-                        <Button
-                          size="sm"
-                          onClick={() => handlePayNow(invoice.id, invoice.balance_amount)}
-                          disabled={createCheckoutSessionMutation.isPending}
-                        >
-                          {createCheckoutSessionMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Pay ₹{invoice.balance_amount.toLocaleString()}
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenComponentDialog(invoice.id)}
+                            disabled={createComponentPaymentMutation.isPending}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Pay Components
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handlePayNow(invoice.id, invoice.balance_amount)}
+                            disabled={createCheckoutSessionMutation.isPending}
+                          >
+                            {createCheckoutSessionMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Pay Full Amount
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -550,6 +678,111 @@ const StudentDashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Component Selection Dialog */}
+      <Dialog open={isComponentDialogOpen} onOpenChange={setIsComponentDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select Fee Components to Pay</DialogTitle>
+            <DialogDescription>
+              Choose which fee components you want to pay for and specify the amounts.
+            </DialogDescription>
+          </DialogHeader>
+
+          {isComponentsLoading ? (
+            <div className="flex justify-center items-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="ml-2">Loading components...</span>
+            </div>
+          ) : invoiceComponents?.components ? (
+            <div className="space-y-4">
+              {invoiceComponents.components.map((component: any) => {
+                const isSelected = selectedComponents[component.id]?.selected || false;
+                const currentAmount = selectedComponents[component.id]?.amount || component.amount;
+                
+                return (
+                  <div key={component.id} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-3">
+                        <Checkbox
+                          id={`component-${component.id}`}
+                          checked={isSelected}
+                          onCheckedChange={(checked) => 
+                            handleComponentSelection(component.id, checked as boolean, component.amount)
+                          }
+                        />
+                        <div>
+                          <Label 
+                            htmlFor={`component-${component.id}`}
+                            className="font-medium cursor-pointer"
+                          >
+                            {component.name}
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            Full Amount: ₹{component.amount.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant={component.status === 'paid' ? 'default' : 'secondary'}>
+                        {component.status}
+                      </Badge>
+                    </div>
+
+                    {isSelected && (
+                      <div className="ml-7 space-y-2">
+                        <Label htmlFor={`amount-${component.id}`}>Payment Amount</Label>
+                        <Input
+                          id={`amount-${component.id}`}
+                          type="number"
+                          value={currentAmount}
+                          onChange={(e) => handleCustomAmountChange(component.id, parseFloat(e.target.value) || 0)}
+                          min="0"
+                          max={component.amount}
+                          step="0.01"
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Balance: ₹{(component.amount - (component.paid_amount || 0)).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {getSelectedTotal() > 0 && (
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center text-lg font-semibold">
+                    <span>Total Selected Amount:</span>
+                    <span>₹{getSelectedTotal().toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsComponentDialogOpen(false)}
+                  disabled={createComponentPaymentMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleComponentPayment}
+                  disabled={createComponentPaymentMutation.isPending || getSelectedTotal() === 0}
+                >
+                  {createComponentPaymentMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Pay ₹{getSelectedTotal().toLocaleString()}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No components available for this invoice.</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -46,8 +46,11 @@ const PaymentSuccess: React.FC = () => {
   }, [isLoading, paymentVerified]);  // Re-run effect when loading or payment verification state changes
   // Log errors for debugging
   useEffect(() => {
-      console.error('Payment status query error:', error);
-    }
+    console.error('Payment status query error:', error);
+  }, [error]);
+
+  // Log payment status for debugging
+  useEffect(() => {
     if (paymentStatus) {
       console.log('Payment status response:', paymentStatus);
       const status = paymentStatus as any;
@@ -58,7 +61,7 @@ const PaymentSuccess: React.FC = () => {
         session_id: status?.session_id
       });
     }
-  }, [error, paymentStatus]);
+  }, [paymentStatus]);
 
   // Check if payment is completed
   useEffect(() => {

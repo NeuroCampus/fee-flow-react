@@ -8,13 +8,16 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.db.models import Sum, Q
-from datetime import datetime
+from datetime import datetime, date
 from django.template.loader import get_template
 from django.http import HttpResponse
 from xhtml2pdf import pisa
 from rest_framework import generics, status
 from rest_framework.response import Response
 from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .models import User, StudentProfile, FeeComponent, FeeTemplate, FeeTemplateComponent, FeeAssignment, Invoice, InvoiceComponent, Payment, PaymentComponent, Notification, CustomFeeStructure, Receipt
 from .serializers import LoginSerializer, UserSerializer, StudentProfileSerializer, NotificationSerializer, FeeComponentSerializer, FeeTemplateSerializer, FeeAssignmentSerializer
@@ -24,11 +27,15 @@ from django.utils.decorators import method_decorator
 # Custom permissions
 class IsStudentUser(IsAuthenticated):
     def has_permission(self, request, view):
-        return request.user.role == 'student'
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return hasattr(request.user, 'role') and request.user.role == 'student'
 
 class IsHODUser(IsAuthenticated):
     def has_permission(self, request, view):
-        return request.user.role == 'hod'
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return hasattr(request.user, 'role') and request.user.role == 'hod'
 
 # Authentication views
 from django.utils.decorators import method_decorator
@@ -66,6 +73,7 @@ class RegisterView(APIView):
         usn = request.data.get('usn', '')
         dept = request.data.get('dept', '')
         semester = request.data.get('semester', 1)
+        admission_mode = request.data.get('admission_mode', 'kcet')
         status = request.data.get('status', 'active')
 
         if not email or not password:
@@ -83,6 +91,7 @@ class RegisterView(APIView):
                         usn=usn,
                         dept=dept,
                         semester=semester,
+                        admission_mode=admission_mode,
                         status=status
                     )
                 return JsonResponse({'message': 'User registered successfully'}, status=201)
@@ -100,7 +109,13 @@ class MeView(APIView):
 
     def get(self, request):
         user = request.user
-        data = {'id': user.id, 'email': user.email, 'role': user.role}
+        data = {
+            'id': user.id, 
+            'email': user.email, 
+            'role': user.role,
+            'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser
+        }
         if user.role == 'student':
             try:
                 profile = StudentProfile.objects.get(user=user)
@@ -109,6 +124,7 @@ class MeView(APIView):
                     'usn': profile.usn,
                     'dept': profile.dept,
                     'semester': profile.semester,
+                    'admission_mode': profile.admission_mode,
                     'status': profile.status
                 })
             except StudentProfile.DoesNotExist:
@@ -140,6 +156,7 @@ class StudentProfileEditView(APIView):
                 'usn': student.usn,
                 'dept': student.dept,
                 'semester': student.semester,
+                'admission_mode': student.admission_mode,
                 'status': student.status,
                 'email': request.user.email
             })
@@ -228,6 +245,7 @@ class StudentDashboardView(APIView):
                     'usn': student.usn,
                     'dept': student.dept,
                     'semester': student.semester,
+                    'admission_mode': student.admission_mode,
                     'status': student.status
                 },
                 'fee_overview': {
@@ -351,6 +369,77 @@ class StudentMarkNotificationReadView(APIView):
         except Notification.DoesNotExist:
             return JsonResponse({'error': 'Notification not found'}, status=404)
 
+
+class StudentProfileUpdateView(APIView):
+    permission_classes = [IsStudentUser]
+
+    def get(self, request):
+        try:
+            student = StudentProfile.objects.get(user=request.user)
+            return JsonResponse({
+                'id': student.id,
+                'name': student.name,
+                'usn': student.usn,
+                'dept': student.dept,
+                'semester': student.semester,
+                'admission_mode': student.admission_mode,
+                'status': student.status
+            })
+        except StudentProfile.DoesNotExist:
+            return JsonResponse({'error': 'Student profile not found'}, status=404)
+
+    def patch(self, request):
+        try:
+            student = StudentProfile.objects.get(user=request.user)
+            for key, value in request.data.items():
+                if key in ['name']:  # Only allow name updates for students
+                    setattr(student, key, value)
+            student.save()
+            return JsonResponse({
+                'id': student.id,
+                'name': student.name,
+                'usn': student.usn,
+                'dept': student.dept,
+                'semester': student.semester,
+                'admission_mode': student.admission_mode,
+                'status': student.status
+            })
+        except StudentProfile.DoesNotExist:
+            return JsonResponse({'error': 'Student profile not found'}, status=404)
+
+class StudentProfileEditView(APIView):
+    permission_classes = [IsStudentUser]
+
+    def patch(self, request):
+        try:
+            user = request.user
+            student = StudentProfile.objects.get(user=user)
+            
+            # Update user fields
+            if 'email' in request.data:
+                user.email = request.data['email']
+                user.save()
+            
+            # Update student fields
+            if 'name' in request.data:
+                student.name = request.data['name']
+                student.save()
+            
+            return JsonResponse({
+                'id': student.id,
+                'name': student.name,
+                'usn': student.usn,
+                'dept': student.dept,
+                'semester': student.semester,
+                'admission_mode': student.admission_mode,
+                'status': student.status,
+                'user': {
+                    'email': user.email,
+                    'role': user.role
+                }
+            })
+        except StudentProfile.DoesNotExist:
+            return JsonResponse({'error': 'Student profile not found'}, status=404)
 
 class StudentReceiptsView(APIView):
     permission_classes = [IsStudentUser]
@@ -477,6 +566,7 @@ class AdminStudentsView(APIView):
                 'usn': s.usn,
                 'dept': s.dept,
                 'semester': s.semester,
+                'admission_mode': s.admission_mode,
                 'status': s.status
             } for s in students]
         })
@@ -494,6 +584,7 @@ class AdminStudentsView(APIView):
                 usn=request.data.get('usn'),
                 dept=request.data.get('dept'),
                 semester=request.data.get('semester'),
+                admission_mode=request.data.get('admission_mode', 'kcet'),
                 status=request.data.get('status', 'active')
             )
             return JsonResponse({
@@ -502,6 +593,7 @@ class AdminStudentsView(APIView):
                 'usn': student.usn,
                 'dept': student.dept,
                 'semester': student.semester,
+                'admission_mode': student.admission_mode,
                 'status': student.status
             }, status=201)
         except Exception as e:
@@ -514,7 +606,7 @@ class AdminStudentDetailView(APIView):
         try:
             student = StudentProfile.objects.get(id=id)
             for key, value in request.data.items():
-                if key in ['name', 'usn', 'dept', 'semester', 'status']:
+                if key in ['name', 'usn', 'dept', 'semester', 'admission_mode', 'status']:
                     setattr(student, key, value)
             student.save()
             return JsonResponse({
@@ -523,6 +615,7 @@ class AdminStudentDetailView(APIView):
                 'usn': student.usn,
                 'dept': student.dept,
                 'semester': student.semester,
+                'admission_mode': student.admission_mode,
                 'status': student.status
             })
         except StudentProfile.DoesNotExist:
@@ -573,38 +666,78 @@ class AdminFeeAssignmentsView(APIView):
     def post(self, request):
         serializer = FeeAssignmentSerializer(data=request.data)
         if serializer.is_valid():
+            # Check if assignment already exists for this student and academic year
+            student = serializer.validated_data.get('student')
+            academic_year = serializer.validated_data.get('academic_year', '2024-25')  # Default if not provided
+            
+            existing_assignment = FeeAssignment.objects.filter(
+                student=student,
+                academic_year=academic_year
+            ).first()
+            
+            if existing_assignment:
+                return Response(
+                    {"error": f"An assignment already exists for this student in academic year {academic_year}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
             assignment = serializer.save()
+            assignment.refresh_from_db()  # Ensure the object is fresh from DB
             
             # Auto-generate invoice upon assignment
-            student = assignment.student
-            template = assignment.template
-            overrides = assignment.overrides
+            try:
+                template = assignment.template
+                if not template:
+                    logger.error(f"No template found for assignment {assignment.id}")
+                    return Response({"error": "Template is required for invoice creation"}, status=status.HTTP_400_BAD_REQUEST)
 
-            total_amount = 0
-            for ft_component in template.feetemplatecomponent_set.all():
-                component_amount = ft_component.amount_override if ft_component.amount_override is not None else ft_component.component.amount
-                total_amount += component_amount
+                overrides = assignment.overrides or {}
+
+                total_amount = 0
+                for ft_component in template.feetemplatecomponent_set.all():
+                    component_amount = ft_component.amount_override if ft_component.amount_override is not None else ft_component.component.amount
+                    total_amount += component_amount
+                
+                # Apply overrides
+                for component_id, override_amount in overrides.items():
+                    try:
+                        component = FeeComponent.objects.get(id=int(component_id))
+                        # Find original amount for this component
+                        original_amount = 0
+                        for ft_comp in template.feetemplatecomponent_set.all():
+                            if ft_comp.component.id == int(component_id):
+                                original_amount = ft_comp.amount_override if ft_comp.amount_override else ft_comp.component.amount
+                                break
+                        # Replace original with override
+                        total_amount = total_amount - original_amount + float(override_amount)
+                    except (FeeComponent.DoesNotExist, ValueError) as e:
+                        logger.warning(f"Invalid component override in assignment {assignment.id}: {component_id}")
+                        continue
+                
+                # Create invoice
+                invoice = Invoice.objects.create(
+                    student=student,
+                    assignment=assignment,
+                    academic_year=assignment.academic_year,
+                    invoice_type=template.fee_type,
+                    semester=template.semester if template.semester else student.semester,
+                    total_amount=total_amount,
+                    paid_amount=0,
+                    balance_amount=total_amount,
+                    due_date=datetime.now().date(),
+                    status='pending'
+                )
+                
+                logger.info(f"Invoice {invoice.invoice_number} created successfully for assignment {assignment.id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create invoice for assignment {assignment.id}: {str(e)}")
+                # Return error response instead of silently failing
+                return Response(
+                    {"error": f"Assignment created but invoice generation failed: {str(e)}"}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
             
-            # Apply overrides
-            for component_id, override_amount in overrides.items():
-                try:
-                    component = FeeComponent.objects.get(id=int(component_id))
-                    # Assuming overrides replace the existing amount for that component
-                    # This logic needs to be refined based on how overrides are structured
-                    # For simplicity, let's assume overrides directly impact the total
-                    total_amount += override_amount # This part needs careful consideration
-                except FeeComponent.DoesNotExist:
-                    pass
-            
-            # Create invoice
-            Invoice.objects.create(
-                student=student,
-                semester=template.semester,  # Assuming template has semester
-                total_amount=total_amount,
-                paid_amount=0,
-                balance_amount=total_amount,
-                due_date=datetime.now().date() # Or a dynamic due date
-            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -811,25 +944,56 @@ class HODReportsView(APIView):
 # Stripe views
 class CreateCheckoutSessionView(APIView):
     permission_classes = [IsAuthenticated]
-
+    
     def post(self, request, id):
         from .stripe_service import create_checkout_session
+        
+        # Rate limiting check (basic implementation)
+        # In production, use Redis or database-based rate limiting
+        recent_payments = Payment.objects.filter(
+            invoice_id=id,
+            timestamp__gte=timezone.now() - timezone.timedelta(minutes=5),
+            status='pending'
+        ).count()
+        
+        if recent_payments >= 3:
+            return JsonResponse({
+                'error': 'Too many payment attempts. Please wait before trying again.'
+            }, status=429)
+        
         try:
             invoice = Invoice.objects.get(id=id)
             student = StudentProfile.objects.get(user=request.user)
             
             # Verify the invoice belongs to the student
             if invoice.student != student:
+                logger.warning(f"Unauthorized payment attempt by user {request.user.id} for invoice {id}")
                 return JsonResponse({'error': 'Unauthorized access to invoice'}, status=403)
             
             # Get payment amount (default to balance amount)
             amount = request.data.get('amount', float(invoice.balance_amount))
             
-            # Validate amount
+            # Enhanced validation
             if amount <= 0:
                 return JsonResponse({'error': 'Amount must be greater than 0'}, status=400)
             if amount > float(invoice.balance_amount):
                 return JsonResponse({'error': 'Amount cannot exceed balance amount'}, status=400)
+            if amount < 1:  # Minimum payment amount
+                return JsonResponse({'error': 'Minimum payment amount is ₹1'}, status=400)
+            
+            # Check for duplicate payments
+            existing_payment = Payment.objects.filter(
+                invoice=invoice,
+                amount=amount,
+                status='pending',
+                timestamp__gte=timezone.now() - timezone.timedelta(minutes=10)
+            ).first()
+            
+            if existing_payment:
+                return JsonResponse({
+                    'error': 'A similar payment is already in progress. Please complete or cancel it first.',
+                    'existing_payment_id': existing_payment.id
+                }, status=409)
             
             # Prepare student info for Stripe
             student_info = {
@@ -843,30 +1007,224 @@ class CreateCheckoutSessionView(APIView):
             # Create Stripe checkout session
             session = create_checkout_session(id, amount, student_info)
             
-            # Create pending payment record
+            # Create pending payment record with additional security fields
             payment = Payment.objects.create(
                 invoice=invoice,
                 amount=amount,
                 mode='stripe',
                 transaction_id=session.id,
-                status='pending'
+                status='pending',
+                payment_reference=f"PAY-{timezone.now().strftime('%Y%m%d%H%M%S')}-{id}"
             )
             
             # Create notification about payment initiation
             Notification.objects.create(
                 user=request.user,
-                message=f"Payment of ₹{amount} initiated for Invoice #{invoice.id}. Complete the payment to proceed.",
+                message=f"Payment session created for ₹{amount} for Invoice #{invoice.id}. Complete the payment within 30 minutes.",
                 is_read=False
             )
+            
+            logger.info(f"Payment session created: {session.id} for user {request.user.id}, invoice {id}, amount {amount}")
             
             return JsonResponse({
                 'checkout_url': session.url,
                 'session_id': session.id,
                 'payment_id': payment.id,
                 'amount': amount,
-                'expires_at': session.expires_at
+                'expires_at': session.expires_at,
+                'payment_reference': payment.payment_reference
             })
             
+        except Invoice.DoesNotExist:
+            return JsonResponse({'error': 'Invoice not found'}, status=404)
+        except StudentProfile.DoesNotExist:
+            return JsonResponse({'error': 'Student profile not found'}, status=404)
+        except Exception as e:
+            logger.error(f"Error creating checkout session: {str(e)}")
+            return JsonResponse({'error': 'Payment processing error. Please try again.'}, status=500)
+        except StudentProfile.DoesNotExist:
+            return JsonResponse({'error': 'Student profile not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+class InvoiceComponentSelectionView(APIView):
+    """View for students to select specific fee components for payment"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, invoice_id):
+        """Get invoice components with payment status"""
+        try:
+            invoice = Invoice.objects.get(id=invoice_id)
+            student = StudentProfile.objects.get(user=request.user)
+
+            # Verify ownership
+            if invoice.student != student:
+                return JsonResponse({'error': 'Unauthorized access'}, status=403)
+
+            components = InvoiceComponent.objects.filter(invoice=invoice).order_by('id')
+
+            component_data = []
+            total_payable = 0
+
+            for component in components:
+                component_info = {
+                    'id': component.id,
+                    'component_name': component.component_name,
+                    'total_amount': float(component.component_amount),
+                    'paid_amount': float(component.paid_amount),
+                    'balance_amount': float(component.balance_amount),
+                    'is_payable': component.balance_amount > 0,
+                    'payment_percentage': (component.paid_amount / component.component_amount * 100) if component.component_amount > 0 else 0
+                }
+                component_data.append(component_info)
+
+                if component.balance_amount > 0:
+                    total_payable += float(component.balance_amount)
+
+            return JsonResponse({
+                'invoice_id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'total_amount': float(invoice.total_amount),
+                'paid_amount': float(invoice.paid_amount),
+                'balance_amount': float(invoice.balance_amount),
+                'components': component_data,
+                'total_payable': total_payable,
+                'can_pay_partial': True
+            })
+
+        except Invoice.DoesNotExist:
+            return JsonResponse({'error': 'Invoice not found'}, status=404)
+        except StudentProfile.DoesNotExist:
+            return JsonResponse({'error': 'Student profile not found'}, status=404)
+
+class ComponentBasedPaymentView(APIView):
+    """View for creating payments for selected components"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, invoice_id):
+        """Create payment session for selected components"""
+        from .stripe_service import create_checkout_session
+        try:
+            invoice = Invoice.objects.get(id=invoice_id)
+            student = StudentProfile.objects.get(user=request.user)
+
+            # Verify ownership
+            if invoice.student != student:
+                return JsonResponse({'error': 'Unauthorized access'}, status=403)
+
+            # Get selected components and amounts
+            component_payments = request.data.get('component_payments', [])
+            if not component_payments:
+                return JsonResponse({'error': 'No components selected for payment'}, status=400)
+
+            # Validate and calculate total payment amount
+            total_payment_amount = 0
+            validated_components = []
+
+            for comp_payment in component_payments:
+                component_id = comp_payment.get('component_id')
+                payment_amount = float(comp_payment.get('amount', 0))
+
+                if payment_amount <= 0:
+                    continue
+
+                try:
+                    component = InvoiceComponent.objects.get(
+                        id=component_id,
+                        invoice=invoice,
+                        balance_amount__gt=0
+                    )
+
+                    # Validate payment amount doesn't exceed balance
+                    if payment_amount > float(component.balance_amount):
+                        return JsonResponse({
+                            'error': f'Payment amount for {component.component_name} exceeds balance'
+                        }, status=400)
+
+                    validated_components.append({
+                        'component': component,
+                        'amount': payment_amount
+                    })
+                    total_payment_amount += payment_amount
+
+                except InvoiceComponent.DoesNotExist:
+                    return JsonResponse({
+                        'error': f'Invalid component or component has no balance: {component_id}'
+                    }, status=400)
+
+            if total_payment_amount <= 0:
+                return JsonResponse({'error': 'Total payment amount must be greater than 0'}, status=400)
+
+            # Create payment record
+            payment = Payment.objects.create(
+                invoice=invoice,
+                amount=total_payment_amount,
+                mode='stripe',
+                status='pending'
+            )
+
+            # Create component payment allocations (pending)
+            for comp_data in validated_components:
+                PaymentComponent.objects.create(
+                    payment=payment,
+                    invoice_component=comp_data['component'],
+                    amount_allocated=comp_data['amount']
+                )
+
+            # Prepare student info for Stripe
+            student_info = {
+                'name': student.name,
+                'usn': student.usn,
+                'email': request.user.email,
+                'dept': student.dept,
+                'semester': student.semester
+            }
+
+            # Create detailed description for Stripe
+            component_descriptions = []
+            for comp_data in validated_components:
+                component_descriptions.append(
+                    f"{comp_data['component'].component_name}: ₹{comp_data['amount']}"
+                )
+
+            description = f"Partial Payment - {', '.join(component_descriptions[:3])}"
+            if len(component_descriptions) > 3:
+                description += f" and {len(component_descriptions) - 3} more"
+
+            # Create Stripe checkout session with component details
+            session = create_checkout_session(
+                invoice_id,
+                total_payment_amount,
+                student_info,
+                description=description,
+                metadata={
+                    'payment_id': str(payment.id),
+                    'component_count': str(len(validated_components)),
+                    'is_partial_payment': 'true'
+                }
+            )
+
+            # Update payment with transaction ID
+            payment.transaction_id = session.id
+            payment.save()
+
+            # Create notification
+            Notification.objects.create(
+                user=request.user,
+                message=f"Payment session created for ₹{total_payment_amount} covering {len(validated_components)} fee components. Complete the payment to proceed.",
+                is_read=False
+            )
+
+            return JsonResponse({
+                'checkout_url': session.url,
+                'session_id': session.id,
+                'payment_id': payment.id,
+                'amount': total_payment_amount,
+                'components_selected': len(validated_components),
+                'expires_at': session.expires_at,
+                'is_partial_payment': True
+            })
+
         except Invoice.DoesNotExist:
             return JsonResponse({'error': 'Invoice not found'}, status=404)
         except StudentProfile.DoesNotExist:
@@ -974,35 +1332,51 @@ class StripeWebhookView(APIView):
     
     def post(self, request):
         from .stripe_service import verify_webhook_signature
+        import json
+        
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
         
+        # Log webhook attempt for security monitoring
+        logger.info(f"Stripe webhook received from {request.META.get('REMOTE_ADDR')}")
+        
+        # Validate webhook signature
         try:
             event = verify_webhook_signature(
-                payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
+                payload, settings.STRIPE_WEBHOOK_SECRET
             )
         except Exception as e:
-            return HttpResponse(f'Webhook error: {str(e)}', status=400)
+            logger.warning(f"Webhook signature verification failed: {str(e)}")
+            return HttpResponse(f'Webhook signature verification failed', status=400)
         
-        # Handle the event
-        if event['type'] == 'checkout.session.completed':
-            session = event['data']['object']
-            self.handle_checkout_session_completed(session)
-            
-        elif event['type'] == 'payment_intent.succeeded':
-            payment_intent = event['data']['object']
-            self.handle_payment_intent_succeeded(payment_intent)
-            
-        elif event['type'] == 'payment_intent.payment_failed':
-            payment_intent = event['data']['object']
-            self.handle_payment_intent_failed(payment_intent)
-            
-        elif event['type'] == 'invoice.payment_succeeded':
-            invoice = event['data']['object']
-            self.handle_invoice_payment_succeeded(invoice)
-            
-        else:
-            print(f'Unhandled event type: {event["type"]}')
+        # Log successful webhook verification
+        logger.info(f"Webhook verified successfully: {event['type']}")
+        
+        # Process the event
+        try:
+            if event['type'] == 'checkout.session.completed':
+                session = event['data']['object']
+                self.handle_checkout_session_completed(session)
+                
+            elif event['type'] == 'payment_intent.succeeded':
+                payment_intent = event['data']['object']
+                self.handle_payment_intent_succeeded(payment_intent)
+                
+            elif event['type'] == 'payment_intent.payment_failed':
+                payment_intent = event['data']['object']
+                self.handle_payment_intent_failed(payment_intent)
+                
+            elif event['type'] == 'invoice.payment_succeeded':
+                invoice = event['data']['object']
+                self.handle_invoice_payment_succeeded(invoice)
+                
+            else:
+                logger.info(f'Unhandled event type: {event["type"]}')
+                
+        except Exception as e:
+            logger.error(f"Error processing webhook event {event['type']}: {str(e)}")
+            # Don't return error to Stripe - we've already verified the webhook
+            # Just log the error and continue
         
         return HttpResponse(status=200)
     
@@ -1013,8 +1387,15 @@ class StripeWebhookView(APIView):
             payment.status = 'success'
             payment.save()
             
-            # Allocate payment to invoice components
-            self.allocate_payment_to_components(payment, float(payment.amount))
+            # Check if this is a component-based payment
+            is_partial_payment = session.get('metadata', {}).get('is_partial_payment') == 'true'
+            
+            if is_partial_payment:
+                # Handle component-based payment allocation
+                self.allocate_payment_to_selected_components(payment, float(payment.amount))
+            else:
+                # Handle full payment allocation (existing logic)
+                self.allocate_payment_to_components(payment, float(payment.amount))
             
             # Update invoice
             invoice = payment.invoice
@@ -1029,9 +1410,10 @@ class StripeWebhookView(APIView):
             
             # Create success notification for student
             if invoice.student and invoice.student.user:
+                payment_type = "partial" if is_partial_payment else "full"
                 Notification.objects.create(
                     user=invoice.student.user,
-                    message=f"Payment of ₹{payment.amount} received successfully on {payment.timestamp.strftime('%d-%b-%Y')}. Pending amount: ₹{invoice.balance_amount}",
+                    message=f"{payment_type.title()} payment of ₹{payment.amount} received successfully on {payment.timestamp.strftime('%d-%b-%Y')}. Pending amount: ₹{invoice.balance_amount}",
                     is_read=False
                 )
             
@@ -1185,6 +1567,48 @@ class StripeWebhookView(APIView):
             
         except Exception as e:
             print(f"Error allocating payment to components: {e}")
+            return False
+    
+    def allocate_payment_to_selected_components(self, payment, amount):
+        """Allocate payment amount to pre-selected components"""
+        try:
+            # Get pre-allocated components for this payment
+            component_allocations = PaymentComponent.objects.filter(
+                payment=payment,
+                amount_allocated__gt=0
+            ).select_related('invoice_component')
+            
+            if not component_allocations:
+                print(f"No component allocations found for payment {payment.id}, falling back to standard allocation")
+                return self.allocate_payment_to_components(payment, amount)
+            
+            remaining_amount = amount
+            
+            for allocation in component_allocations:
+                if remaining_amount <= 0:
+                    break
+                    
+                component = allocation.invoice_component
+                allocated_amount = float(allocation.amount_allocated)
+                
+                # Allocate to this component
+                actual_allocation = min(remaining_amount, allocated_amount)
+                
+                # Update component payment status
+                component.paid_amount += actual_allocation
+                component.balance_amount -= actual_allocation
+                component.save()
+                
+                # Update the allocation record with actual amount allocated
+                allocation.amount_allocated = actual_allocation
+                allocation.save()
+                
+                remaining_amount -= actual_allocation
+                
+            return True
+            
+        except Exception as e:
+            print(f"Error allocating payment to selected components: {e}")
             return False
     
     def save_receipt_pdf(self, receipt, receipt_data):
@@ -1663,3 +2087,337 @@ class AdminStudentFeeBreakdownView(APIView):
             
         except StudentProfile.DoesNotExist:
             return JsonResponse({'error': 'Student not found'}, status=404)
+
+
+class AdminBulkFeeAssignmentView(APIView):
+    """Admin view for bulk assigning fee templates to students by admission mode and department"""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        """Get available templates and student counts by admission mode and department"""
+        admission_modes = StudentProfile.ADMISSION_MODE_CHOICES
+        departments = StudentProfile.objects.values_list('dept', flat=True).distinct()
+
+        template_stats = []
+        for mode_code, mode_name in admission_modes:
+            for dept in departments:
+                student_count = StudentProfile.objects.filter(
+                    admission_mode=mode_code, 
+                    dept=dept
+                ).count()
+                
+                if student_count > 0:
+                    assigned_count = FeeAssignment.objects.filter(
+                        student__admission_mode=mode_code,
+                        student__dept=dept
+                    ).count()
+
+                    # Find matching templates
+                    matching_templates = FeeTemplate.objects.filter(
+                        admission_mode=mode_code
+                    ).filter(
+                        Q(dept=dept) | Q(dept__isnull=True) | Q(dept='')
+                    )
+
+                    template_stats.append({
+                        'admission_mode': mode_code,
+                        'admission_mode_name': mode_name,
+                        'department': dept,
+                        'total_students': student_count,
+                        'assigned_students': assigned_count,
+                        'unassigned_students': student_count - assigned_count,
+                        'available_templates': [{
+                            'id': t.id,
+                            'name': t.name,
+                            'total_amount': float(t.total_amount),
+                            'fee_type': t.fee_type
+                        } for t in matching_templates]
+                    })
+
+        return JsonResponse({
+            'bulk_assignment_stats': template_stats
+        })
+
+    def post(self, request):
+        """Bulk assign fee template to students by admission mode and department"""
+        # Handle both form data and JSON data
+        if request.content_type == 'application/json':
+            data = request.data
+        else:
+            data = request.POST
+            
+        admission_mode = data.get('admission_mode')
+        department = data.get('department')
+        template_id = data.get('template_id')
+        academic_year = data.get('academic_year', '2024-25')
+        dry_run = data.get('dry_run', False)  # Default to False for safety
+
+        if not all([admission_mode, department, template_id]):
+            return JsonResponse({
+                'error': 'admission_mode, department, and template_id are required'
+            }, status=400)
+
+        try:
+            template = FeeTemplate.objects.get(id=template_id)
+        except FeeTemplate.DoesNotExist:
+            return JsonResponse({'error': 'Template not found'}, status=404)
+
+        # Get students matching criteria
+        students = StudentProfile.objects.filter(
+            admission_mode=admission_mode,
+            dept=department
+        ).exclude(
+            # Exclude students who already have an assignment for this academic year
+            feeassignment__academic_year=academic_year
+        )
+
+        if not students:
+            return JsonResponse({
+                'error': 'No eligible students found matching the criteria'
+            }, status=400)
+
+        assignments_created = 0
+        invoices_created = 0
+        admin_user = request.user
+
+        for student in students:
+            if not dry_run:
+                # Create fee assignment
+                assignment = FeeAssignment.objects.create(
+                    student=student,
+                    template=template,
+                    assignment_type='bulk',
+                    academic_year=academic_year,
+                    assigned_by=admin_user,
+                    is_active=True
+                )
+
+                # Create invoice
+                invoice = Invoice.objects.create(
+                    student=student,
+                    assignment=assignment,
+                    invoice_type=template.fee_type,
+                    academic_year=academic_year,
+                    total_amount=template.total_amount,
+                    paid_amount=0,
+                    balance_amount=template.total_amount,
+                    due_date=date.today(),
+                    status='pending'
+                )
+
+                # Create invoice components from template
+                for ft_component in template.feetemplatecomponent_set.all():
+                    InvoiceComponent.objects.create(
+                        invoice=invoice,
+                        component_name=ft_component.component.name,
+                        component_amount=ft_component.amount_override or ft_component.component.amount,
+                        paid_amount=0,
+                        balance_amount=ft_component.amount_override or ft_component.component.amount
+                    )
+
+            assignments_created += 1
+            invoices_created += 1
+
+        action = "simulated" if dry_run else "assigned"
+        return JsonResponse({
+            'message': f'Successfully {action} fees to {assignments_created} students',
+            'assignments_created': assignments_created,
+            'invoices_created': invoices_created,
+            'students_processed': len(students),
+            'dry_run': dry_run,
+            'template_used': {
+                'id': template.id,
+                'name': template.name,
+                'total_amount': float(template.total_amount),
+                'admission_mode': template.admission_mode,
+                'department': template.dept
+            }
+        })
+
+class AdminAutoAssignFeesView(APIView):
+    """Admin view for auto-assigning fee templates based on admission mode rules"""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        """Get auto-assignment rules and preview"""
+        # Define default rules for admission modes
+        rules = {
+            'kcet': {'template_pattern': 'KCET', 'auto_assign': True},
+            'comedk': {'template_pattern': 'COMED-K', 'auto_assign': True},
+            'management': {'template_pattern': 'Management', 'auto_assign': False},  # Manual assignment
+            'jee': {'template_pattern': 'JEE', 'auto_assign': True},
+            'diploma': {'template_pattern': 'Diploma', 'auto_assign': True},
+            'lateral': {'template_pattern': 'Lateral', 'auto_assign': True},
+            'other': {'template_pattern': 'General', 'auto_assign': False}  # Manual assignment
+        }
+
+        # Get statistics for each admission mode and department
+        stats = []
+        departments = StudentProfile.objects.values_list('dept', flat=True).distinct()
+
+        for mode_code, rule in rules.items():
+            for dept in departments:
+                student_count = StudentProfile.objects.filter(
+                    admission_mode=mode_code, 
+                    dept=dept
+                ).count()
+                
+                if student_count > 0:
+                    assigned_count = FeeAssignment.objects.filter(
+                        student__admission_mode=mode_code,
+                        student__dept=dept
+                    ).count()
+
+                    # Find matching templates
+                    matching_templates = FeeTemplate.objects.filter(
+                        name__icontains=rule['template_pattern']
+                    ).filter(
+                        Q(dept=dept) | Q(dept__isnull=True) | Q(dept='')
+                    )
+
+                    stats.append({
+                        'admission_mode': mode_code,
+                        'department': dept,
+                        'rule': rule,
+                        'total_students': student_count,
+                        'assigned_students': assigned_count,
+                        'unassigned_students': student_count - assigned_count,
+                        'matching_templates': [{
+                            'id': t.id,
+                            'name': t.name,
+                            'total_amount': float(t.total_amount),
+                            'fee_type': t.fee_type
+                        } for t in matching_templates]
+                    })
+
+        return JsonResponse({
+            'auto_assignment_rules': rules,
+            'statistics': stats
+        })
+
+    def post(self, request):
+        """Execute auto-assignment for specified admission modes and departments"""
+        # Handle both form data and JSON data
+        if request.content_type == 'application/json':
+            data = request.data
+        else:
+            data = request.POST
+            
+        admission_modes = data.get('admission_modes', [])
+        departments = data.get('departments', [])
+        dry_run = data.get('dry_run', True)  # Default to dry run
+        academic_year = data.get('academic_year', '2024-25')
+
+        if not admission_modes:
+            return JsonResponse({
+                'error': 'admission_modes list is required'
+            }, status=400)
+
+        # Define rules
+        rules = {
+            'kcet': 'KCET',
+            'comedk': 'COMED-K',
+            'jee': 'JEE',
+            'diploma': 'Diploma',
+            'lateral': 'Lateral'
+        }
+
+        results = {}
+        total_assignments_created = 0
+        total_invoices_created = 0
+        admin_user = request.user
+
+        for mode in admission_modes:
+            if mode not in rules:
+                results[mode] = {'error': f'No rule defined for {mode}'}
+                continue
+
+            template_pattern = rules[mode]
+
+            # Get departments to process
+            depts_to_process = departments if departments else StudentProfile.objects.filter(
+                admission_mode=mode
+            ).values_list('dept', flat=True).distinct()
+
+            for dept in depts_to_process:
+                # Find students without assignments for this academic year
+                unassigned_students = StudentProfile.objects.filter(
+                    admission_mode=mode,
+                    dept=dept
+                ).exclude(
+                    feeassignment__academic_year=academic_year
+                )
+
+                if not unassigned_students:
+                    continue
+
+                # Find appropriate template
+                template = FeeTemplate.objects.filter(
+                    name__icontains=template_pattern
+                ).filter(
+                    Q(dept=dept) | Q(dept__isnull=True) | Q(dept='')
+                ).first()
+
+                if not template:
+                    results[f'{mode}_{dept}'] = {'error': f'No template found for {mode} in {dept}'}
+                    continue
+
+                assignments_created = 0
+                invoices_created = 0
+
+                if not dry_run:
+                    for student in unassigned_students:
+                        # Create assignment
+                        assignment = FeeAssignment.objects.create(
+                            student=student,
+                            template=template,
+                            assignment_type='auto',
+                            academic_year=academic_year,
+                            assigned_by=admin_user,
+                            is_active=True
+                        )
+
+                        # Create invoice
+                        invoice = Invoice.objects.create(
+                            student=student,
+                            assignment=assignment,
+                            invoice_type=template.fee_type,
+                            academic_year=academic_year,
+                            total_amount=template.total_amount,
+                            paid_amount=0,
+                            balance_amount=template.total_amount,
+                            due_date=date.today(),
+                            status='pending'
+                        )
+
+                        # Create invoice components
+                        for ft_component in template.feetemplatecomponent_set.all():
+                            InvoiceComponent.objects.create(
+                                invoice=invoice,
+                                component_name=ft_component.component.name,
+                                component_amount=ft_component.amount_override or ft_component.component.amount,
+                                paid_amount=0,
+                                balance_amount=ft_component.amount_override or ft_component.component.amount
+                            )
+
+                        assignments_created += 1
+                        invoices_created += 1
+
+                results[f'{mode}_{dept}'] = {
+                    'students_processed': len(unassigned_students),
+                    'assignments_created': assignments_created,
+                    'invoices_created': invoices_created,
+                    'template_used': template.name,
+                    'dry_run': dry_run
+                }
+
+                total_assignments_created += assignments_created
+                total_invoices_created += invoices_created
+
+        return JsonResponse({
+            'message': f'{"Preview" if dry_run else "Executed"} auto-assignment',
+            'total_assignments_created': total_assignments_created,
+            'total_invoices_created': total_invoices_created,
+            'results': results,
+            'dry_run': dry_run
+        })

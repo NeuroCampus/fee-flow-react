@@ -12,6 +12,7 @@ interface User {
   usn?: string;
   dept?: string;
   semester?: number;
+  admission_mode?: string;
   status?: string;
 }
 
@@ -38,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           // In a real application, you might want to refresh the token here
           // For now, we'll just assume the token is valid and fetch user data.
-          const response = await authAPI.me(storedAccessToken);
+          const response = await authAPI.me();
           setUser(response.data);
           setAccessToken(storedAccessToken);
         } catch (error) {

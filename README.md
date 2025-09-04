@@ -254,3 +254,286 @@ For support and questions:
 ---
 
 **Built with ❤️ using React, TypeScript, Django, and modern web technologies**
+
+
+
+
+
+
+
+# College Fee Management System - Backend
+
+A comprehensive Django REST API backend for managing college fee payments with Stripe integration.
+
+## 🚀 Features
+
+- **User Management**: Student, Admin, and HOD roles with JWT authentication
+- **Fee Management**: Flexible fee structures with components and templates
+- **Invoice Generation**: Automated invoice creation with unique numbering
+- **Stripe Integration**: Secure online payments with webhook handling
+- **Receipt Generation**: PDF receipts with customizable templates
+- **Payment Tracking**: Complete payment history and status tracking
+- **Dashboard Analytics**: Comprehensive reporting for admins and HODs
+- **Notification System**: Real-time notifications for users
+
+## 🛠️ Tech Stack
+
+- **Backend**: Django 4.2+ with Django REST Framework
+- **Database**: SQLite (default) / PostgreSQL (production)
+- **Authentication**: JWT (JSON Web Tokens)
+- **Payments**: Stripe API
+- **PDF Generation**: xhtml2pdf
+- **Environment**: Python virtual environment
+
+## � Default Users
+
+After running the setup script, the following users are available:
+
+- **Admin User**: `admin@example.com` / `admin123`
+- **Test Students**: 
+  - `john.doe@example.com` / `student123`
+  - `jane.smith@example.com` / `student123`
+  - `bob.johnson@example.com` / `student123`
+
+## �📋 Prerequisites
+
+- Python 3.8+
+- pip (Python package manager)
+- Git
+
+## 🚀 Quick Start
+
+### 1. Clone and Setup
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd college_fee_backend
+
+# Run the automated setup script
+./setup.sh
+```
+
+### 2. Manual Setup (Alternative)
+
+```bash
+# Create virtual environment
+python3 -m venv env
+source env/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env file
+cp .env.example .env
+# Edit .env with your Stripe keys
+
+# Run migrations
+python manage.py migrate
+
+# Create superuser
+python manage.py createsuperuser
+```
+
+### 3. Configure Environment Variables
+
+Update the `.env` file with your actual values:
+
+```env
+# Django settings
+SECRET_KEY=your-secret-key-here
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_test_your_actual_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=whsec_your_actual_webhook_secret
+
+# Frontend URL
+FRONTEND_URL=http://localhost:3000
+```
+
+### 4. Run the Server
+
+```bash
+# Activate virtual environment
+source env/bin/activate
+
+# Start development server
+python manage.py runserver
+```
+
+The API will be available at: `http://localhost:8000`
+
+## 📚 API Documentation
+
+### Authentication Endpoints
+
+- `POST /auth/login/` - User login
+- `POST /auth/register/` - User registration
+- `POST /auth/logout/` - User logout
+- `GET /auth/me/` - Get current user info
+
+### Student Endpoints
+
+- `GET /api/student/dashboard/` - Student dashboard data
+- `GET /invoices/` - List student invoices
+- `GET /invoices/{id}/` - Invoice details
+- `GET /api/student/payments/` - Payment history
+- `GET /api/student/receipts/` - Receipt history
+- `GET /notifications/` - User notifications
+
+### Admin Endpoints
+
+- `GET/POST /students/` - Manage students
+- `GET/POST /fee/components/` - Manage fee components
+- `GET/POST /fee/templates/` - Manage fee templates
+- `GET/POST /admin/invoices/` - Manage invoices
+- `GET/POST /payments/` - Manage payments
+- `POST /payments/offline/` - Record offline payments
+
+### Stripe Integration
+
+- `POST /invoices/{id}/create-checkout-session/` - Create payment session
+- `GET /payments/{session_id}/status/` - Check payment status
+- `POST /webhooks/stripe/` - Stripe webhook handler
+- `POST /payments/{id}/refund/` - Process refunds
+
+## 🗄️ Database Models
+
+### Core Models
+
+- **User**: Custom user model with roles (student, admin, hod)
+- **StudentProfile**: Extended profile for students with admission mode tracking (KCET, COMED-K, Management, etc.)
+- **FeeComponent**: Individual fee components (tuition, library, etc.)
+- **FeeTemplate**: Templates combining multiple components
+- **Invoice**: Generated invoices for students
+- **Payment**: Payment records with Stripe integration
+- **Receipt**: Generated PDF receipts
+- **Notification**: User notifications
+
+### Relationships
+
+```
+User (1) ─── (1) StudentProfile
+StudentProfile (1) ─── (N) Invoice
+Invoice (1) ─── (N) Payment
+Payment (1) ─── (1) Receipt
+FeeTemplate (N) ─── (N) FeeComponent
+```
+
+## 🎓 Admission Modes
+
+The system supports tracking different admission modes for students:
+
+- **KCET**: Karnataka Common Entrance Test
+- **COMED-K**: Consortium of Medical, Engineering and Dental Colleges of Karnataka
+- **Management**: Management quota admission
+- **JEE**: Joint Entrance Examination
+- **Diploma**: Diploma holders (lateral entry)
+- **Lateral**: Lateral entry students
+- **Other**: Other admission modes
+
+## 🔧 Configuration
+
+### Stripe Setup
+
+1. Create a Stripe account at [stripe.com](https://stripe.com)
+2. Get your API keys from the Stripe Dashboard
+3. Set up webhook endpoint for `http://yourdomain.com/webhooks/stripe/`
+4. Update `.env` with your keys
+
+### Production Deployment
+
+1. Set `DEBUG=False` in `.env`
+2. Use a production database (PostgreSQL recommended)
+3. Set up proper `ALLOWED_HOSTS`
+4. Configure HTTPS
+5. Set up Stripe webhook endpoint with proper secret
+
+## 🧪 Testing
+
+### Run Tests
+
+```bash
+# Run all tests
+python manage.py test
+
+# Run specific test file
+python manage.py test backend.tests.test_stripe_integration
+```
+
+### Test Stripe Integration
+
+```bash
+# Run Stripe integration tests
+python test_stripe_integration.py
+```
+
+## 📁 Project Structure
+
+```
+college_fee_backend/
+├── backend/
+│   ├── __init__.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── models.py          # Database models
+│   ├── serializers.py     # DRF serializers
+│   ├── views.py          # API views
+│   ├── urls.py           # URL routing
+│   ├── settings.py       # Django settings
+│   ├── stripe_service.py # Stripe integration
+│   ├── wsgi.py
+│   └── templates/        # HTML templates
+│       └── receipt_template.html
+├── logs/                 # Application logs
+├── receipts/            # Generated PDF receipts
+├── env/                 # Virtual environment
+├── .env                 # Environment variables
+├── manage.py
+├── requirements.txt
+├── setup.sh            # Setup script
+└── README.md
+```
+
+## 🔒 Security Features
+
+- JWT authentication with refresh tokens
+- Role-based access control
+- CORS protection
+- Secure Stripe webhook verification
+- Input validation and sanitization
+- SQL injection prevention
+
+## 📊 Monitoring & Logging
+
+- Comprehensive logging to `logs/stripe.log`
+- Payment tracking and audit trails
+- Error handling with detailed messages
+- Performance monitoring capabilities
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For support and questions:
+- Check the [Issues](../../issues) page
+- Review the [STRIPE_INTEGRATION_GUIDE.md](STRIPE_INTEGRATION_GUIDE.md)
+- Check the [SETUP_GUIDE.md](../../SETUP_GUIDE.md) in the root directory
+
+## 🔄 API Versioning
+
+Current API version: v1
+
+All endpoints are prefixed with appropriate paths for future versioning support.

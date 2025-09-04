@@ -14,7 +14,7 @@ class LoginSerializer(serializers.Serializer):
 class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentProfile
-        fields = ('id', 'name', 'usn', 'dept', 'semester', 'status', 'user')
+        fields = ('id', 'name', 'usn', 'dept', 'semester', 'admission_mode', 'status', 'user')
         read_only_fields = ('user', 'usn', 'dept', 'semester', 'status')
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -41,7 +41,7 @@ class FeeTemplateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FeeTemplate
-        fields = ('id', 'name', 'dept', 'semester', 'components', 'component_ids')
+        fields = ('id', 'name', 'admission_mode', 'dept', 'fee_type', 'academic_year', 'semester', 'total_amount', 'is_active', 'components', 'component_ids')
 
     def create(self, validated_data):
         component_ids = validated_data.pop('component_ids', [])
@@ -71,4 +71,4 @@ class FeeTemplateSerializer(serializers.ModelSerializer):
 class FeeAssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeeAssignment
-        fields = ('id', 'student', 'template', 'overrides')
+        fields = ('id', 'student', 'template', 'academic_year', 'overrides')
