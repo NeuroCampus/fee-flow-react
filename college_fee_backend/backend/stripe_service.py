@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 # Set Stripe API key
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
-def create_checkout_session(invoice_id, amount, student_info=None):
+def create_checkout_session(invoice_id, amount, student_info=None, description=None, metadata=None):
     """
     Create a Stripe checkout session for fee payment
     
@@ -18,6 +18,8 @@ def create_checkout_session(invoice_id, amount, student_info=None):
         invoice_id: ID of the invoice being paid
         amount: Payment amount in rupees
         student_info: Dictionary containing student information (optional)
+        description: Custom description for the payment (optional)
+        metadata: Additional metadata dictionary (optional)
     
     Returns:
         Stripe checkout session object
@@ -34,6 +36,9 @@ def create_checkout_session(invoice_id, amount, student_info=None):
                 'customer_creation': 'always',
             }
         
+        # Use custom description if provided, otherwise use default
+        payment_description = description or f"Fee payment for {student_info.get('name', 'Student')} - {student_info.get('usn', '')}"
+        
         session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
@@ -41,7 +46,7 @@ def create_checkout_session(invoice_id, amount, student_info=None):
                     'currency': 'inr',
                     'product_data': {
                         'name': f'College Fee Payment - Invoice #{invoice_id}',
-                        'description': f"Fee payment for {student_info.get('name', 'Student')} - {student_info.get('usn', '')}" if student_info else 'College fee payment',
+                        'description': payment_description,
                         'metadata': {
                             'invoice_id': str(invoice_id),
                             'student_usn': student_info.get('usn', '') if student_info else '',
@@ -63,6 +68,10 @@ def create_checkout_session(invoice_id, amount, student_info=None):
             expires_at=int((time.time() + 1800)),  # 30 minutes expiry
             **customer_info
         )
+        
+        # Add custom metadata if provided
+        if metadata:
+            session.metadata.update(metadata)
         
         logger.info(f"Stripe checkout session created: {session.id} for invoice {invoice_id}")
         return session

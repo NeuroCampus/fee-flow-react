@@ -16,18 +16,25 @@ import {
   Check,
   PlusCircle,
   Download,
+  AlertCircle,
+  Loader2,
+  Edit,
+  Trash2,
+  Tag,
+  BookText,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminAPI, FeeComponent, FeeTemplate, StudentProfile, FeeAssignment, Invoice, Payment } from '@/lib/api';
+import { adminAPI, FeeComponent, FeeTemplate, StudentProfile, FeeAssignment, Invoice, Payment, BulkAssignmentRequest, BulkAssignmentResponse, AutoAssignmentRequest, AutoAssignmentResponse, BulkAssignmentStats } from '@/lib/api';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { toast } from "@/components/ui/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Edit, Trash2, Tag, BookText } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from "@/components/ui/badge";
 import Unauthorized from '@/pages/Unauthorized';
 
 interface FeeAssignmentForm {
@@ -151,8 +158,12 @@ const AdminDashboard = () => {
   const [currentFeeTemplate, setCurrentFeeTemplate] = useState<FeeTemplate | null>(null);
   const [feeTemplateForm, setFeeTemplateForm] = useState({
     name: '',
+    admission_mode: '',
     dept: '',
+    fee_type: 'annual',
+    academic_year: '2024-25',
     semester: 1,
+    is_active: true,
     component_ids: [] as number[],
   });
 
@@ -179,6 +190,21 @@ const AdminDashboard = () => {
   // Reports states
   const [reportFilterDept, setReportFilterDept] = useState('all');
   const [reportFilterSemester, setReportFilterSemester] = useState('all');
+
+  // Bulk Assignment states
+  const [bulkAssignmentForm, setBulkAssignmentForm] = useState({
+    admission_mode: '',
+    department: '',
+    template_id: 0,
+    academic_year: '',
+    dry_run: true,
+  });
+  const [autoAssignmentForm, setAutoAssignmentForm] = useState({
+    admission_modes: [] as string[],
+    departments: [] as string[],
+    academic_year: '',
+    dry_run: true,
+  });
 
   // Queries
   const { data: studentsData, isLoading: isLoadingStudents } = useQuery({
@@ -217,6 +243,13 @@ const AdminDashboard = () => {
     queryKey: ["outstandingReports", reportFilterDept, reportFilterSemester],
     queryFn: () => adminAPI.getOutstandingReports(reportFilterDept === 'all' ? undefined : reportFilterDept, reportFilterSemester === 'all' ? undefined : Number(reportFilterSemester)),
     enabled: activeTab === "reports" // Only fetch when on reports tab
+  });
+
+  // Bulk Assignment queries
+  const { data: bulkAssignmentStats, isLoading: isLoadingBulkStats } = useQuery({
+    queryKey: ["bulkAssignmentStats"],
+    queryFn: adminAPI.getBulkAssignmentStats,
+    enabled: activeTab === "bulk-assignment" // Only fetch when on bulk assignment tab
   });
 
 
@@ -361,7 +394,7 @@ const AdminDashboard = () => {
         description: "The fee template has been successfully added.",
       });
       setIsFeeTemplateDialogOpen(false);
-      setFeeTemplateForm({ name: '', dept: '', semester: 1, component_ids: [] });
+      setFeeTemplateForm({ name: '', admission_mode: '', dept: '', fee_type: 'annual', academic_year: '2024-25', semester: 1, is_active: true, component_ids: [] });
     },
     onError: (error: any) => {
       toast({
@@ -507,6 +540,59 @@ const AdminDashboard = () => {
     },
   });
 
+  // Mutations for Bulk Assignment
+  const bulkAssignFeesMutation = useMutation({
+    mutationFn: (data: BulkAssignmentRequest) => adminAPI.bulkAssignFees(data),
+    onSuccess: (data: BulkAssignmentResponse) => {
+      queryClient.invalidateQueries({ queryKey: ["bulkAssignmentStats"] });
+      queryClient.invalidateQueries({ queryKey: ["adminStudents"] });
+      queryClient.invalidateQueries({ queryKey: ["feeAssignments"] });
+      queryClient.invalidateQueries({ queryKey: ["adminInvoices"] });
+      
+      const message = data.dry_run 
+        ? `Dry run completed: ${data.assignments_created} assignments would be created, ${data.invoices_created} invoices would be generated.`
+        : `Bulk assignment completed: ${data.assignments_created} assignments created, ${data.invoices_created} invoices generated.`;
+      
+      toast({
+        title: data.dry_run ? "Dry Run Completed" : "Bulk Assignment Completed",
+        description: message,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Bulk Assignment Failed",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const autoAssignFeesMutation = useMutation({
+    mutationFn: (data: AutoAssignmentRequest) => adminAPI.executeAutoAssignment(data),
+    onSuccess: (data: AutoAssignmentResponse) => {
+      queryClient.invalidateQueries({ queryKey: ["bulkAssignmentStats"] });
+      queryClient.invalidateQueries({ queryKey: ["adminStudents"] });
+      queryClient.invalidateQueries({ queryKey: ["feeAssignments"] });
+      queryClient.invalidateQueries({ queryKey: ["adminInvoices"] });
+      
+      const message = data.dry_run 
+        ? `Dry run completed: ${data.total_assignments_created} assignments would be created, ${data.total_invoices_created} invoices would be generated.`
+        : `Auto assignment completed: ${data.total_assignments_created} assignments created, ${data.total_invoices_created} invoices generated.`;
+      
+      toast({
+        title: data.dry_run ? "Dry Run Completed" : "Auto Assignment Completed",
+        description: message,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Auto Assignment Failed",
+        description: error.response?.data?.error || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handlers for Students
   const handleAddStudent = () => {
     setCurrentStudent(null);
@@ -577,7 +663,16 @@ const AdminDashboard = () => {
   // Handlers for Fee Templates
   const handleAddFeeTemplate = () => {
     setCurrentFeeTemplate(null);
-    setFeeTemplateForm({ name: '', dept: '', semester: 1, component_ids: [] });
+    setFeeTemplateForm({
+      name: '',
+      admission_mode: '',
+      dept: '',
+      fee_type: 'annual',
+      academic_year: '2024-25',
+      semester: 1,
+      is_active: true,
+      component_ids: []
+    });
     setIsFeeTemplateDialogOpen(true);
   };
 
@@ -585,9 +680,13 @@ const AdminDashboard = () => {
     setCurrentFeeTemplate(template);
     setFeeTemplateForm({
       name: template.name,
-      dept: template.dept,
-      semester: template.semester,
-      component_ids: template.components.map((comp) => comp.component.id), // Extract component_ids
+      admission_mode: template.admission_mode || '',
+      dept: template.dept || '',
+      fee_type: template.fee_type || 'annual',
+      academic_year: template.academic_year || '2024-25',
+      semester: template.semester || 1,
+      is_active: template.is_active !== false,
+      component_ids: template.component_ids || [],
     });
     setIsFeeTemplateDialogOpen(true);
   };
@@ -635,8 +734,9 @@ const AdminDashboard = () => {
         
         // Convert overrides to components format
         Object.entries(overrides).forEach(([name, amount]) => {
-          if (amount > 0) {
-            components[name] = Number(amount);
+          const numAmount = Number(amount);
+          if (numAmount > 0) {
+            components[name] = numAmount;
           }
         });
         
@@ -739,16 +839,28 @@ const AdminDashboard = () => {
     return studentsData?.students.find((s) => s.id === studentId)?.name || `Student ID: ${studentId}`;
   };
 
+  // Handlers for Bulk Assignment
+  const handleBulkAssignment = (e: React.FormEvent) => {
+    e.preventDefault();
+    bulkAssignFeesMutation.mutate(bulkAssignmentForm);
+  };
+
+  const handleAutoAssignment = (e: React.FormEvent) => {
+    e.preventDefault();
+    autoAssignFeesMutation.mutate(autoAssignmentForm);
+  };
+
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
 
       <Tabs defaultValue="students" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="students">Student Management</TabsTrigger>
           <TabsTrigger value="fee-setup">Fee Setup</TabsTrigger>
           <TabsTrigger value="fee-assignments">Fee Assignments</TabsTrigger>
           <TabsTrigger value="individual-fees">Individual Fees</TabsTrigger>
+          <TabsTrigger value="bulk-assignment">Bulk Assignment</TabsTrigger>
           <TabsTrigger value="payments">Payment Tracking</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
           </TabsList>
@@ -1052,16 +1164,18 @@ const AdminDashboard = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
+                      <TableHead>Admission Mode</TableHead>
                       <TableHead>Department</TableHead>
-                      <TableHead>Semester</TableHead>
-                      <TableHead>Components</TableHead>
+                      <TableHead>Fee Type</TableHead>
+                      <TableHead>Academic Year</TableHead>
+                      <TableHead>Total Amount</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoadingFeeTemplates ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center">
+                        <TableCell colSpan={7} className="text-center">
                           <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading Fee Templates...
                         </TableCell>
                       </TableRow>
@@ -1069,13 +1183,11 @@ const AdminDashboard = () => {
                       feeTemplatesData.map((template) => (
                         <TableRow key={template.id}>
                           <TableCell>{template.name}</TableCell>
-                          <TableCell>{template.dept}</TableCell>
-                          <TableCell>{template.semester}</TableCell>
-                          <TableCell>
-                            {template.components
-                              .map((comp) => `${comp.component.name} (₹${comp.amount_override || comp.component.amount})`)
-                              .join(", ")}
-                          </TableCell>
+                          <TableCell>{template.admission_mode}</TableCell>
+                          <TableCell>{template.dept || 'All'}</TableCell>
+                          <TableCell>{template.fee_type}</TableCell>
+                          <TableCell>{template.academic_year}</TableCell>
+                          <TableCell>₹{template.total_amount?.toLocaleString() || '0'}</TableCell>
                           <TableCell className="text-right">
                             <Button
                               variant="ghost"
@@ -1097,7 +1209,7 @@ const AdminDashboard = () => {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center">
+                        <TableCell colSpan={7} className="text-center">
                           No fee templates found.
                         </TableCell>
                       </TableRow>
@@ -1128,29 +1240,65 @@ const AdminDashboard = () => {
                     onChange={(e) => setFeeTemplateForm({ ...feeTemplateForm, name: e.target.value })}
                     required
                   />
-                  </div>
+                </div>
                 <div className="space-y-2">
-                  <Label htmlFor="template-dept">Department</Label>
+                  <Label htmlFor="template-admission-mode">Admission Mode</Label>
+                  <Select
+                    value={feeTemplateForm.admission_mode}
+                    onValueChange={(value) => setFeeTemplateForm({ ...feeTemplateForm, admission_mode: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select admission mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kcet">KCET</SelectItem>
+                      <SelectItem value="comedk">COMED-K</SelectItem>
+                      <SelectItem value="management">Management</SelectItem>
+                      <SelectItem value="jee">JEE</SelectItem>
+                      <SelectItem value="diploma">Diploma</SelectItem>
+                      <SelectItem value="lateral">Lateral Entry</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="template-dept">Department (Optional)</Label>
                   <Input
                     id="template-dept"
                     value={feeTemplateForm.dept}
                     onChange={(e) => setFeeTemplateForm({ ...feeTemplateForm, dept: e.target.value })}
-                    required
+                    placeholder="Leave empty for all departments"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="template-semester">Semester</Label>
+                  <Label htmlFor="template-fee-type">Fee Type</Label>
+                  <Select
+                    value={feeTemplateForm.fee_type}
+                    onValueChange={(value) => setFeeTemplateForm({ ...feeTemplateForm, fee_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select fee type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="annual">Annual</SelectItem>
+                      <SelectItem value="semester">Semester</SelectItem>
+                      <SelectItem value="one_time">One-time</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="template-academic-year">Academic Year</Label>
                   <Input
-                    id="template-semester"
-                    type="number"
-                    value={feeTemplateForm.semester}
-                    onChange={(e) => setFeeTemplateForm({ ...feeTemplateForm, semester: Number(e.target.value) })}
+                    id="template-academic-year"
+                    value={feeTemplateForm.academic_year}
+                    onChange={(e) => setFeeTemplateForm({ ...feeTemplateForm, academic_year: e.target.value })}
+                    placeholder="2024-25"
                     required
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Fee Components</Label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
                     {feeComponentsData?.map((component) => (
                       <div key={component.id} className="flex items-center space-x-2">
                         <Checkbox
@@ -1171,7 +1319,7 @@ const AdminDashboard = () => {
                         >
                           {component.name} (₹{component.amount.toLocaleString()})
                         </label>
-                </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1315,7 +1463,7 @@ const AdminDashboard = () => {
                       <SelectContent>
                         {Array.isArray(feeTemplatesData) && feeTemplatesData.map((template) => (
                           <SelectItem key={template.id} value={String(template.id)}>
-                            {template.name} ({template.dept} - Sem {template.semester})
+                            {template.name} ({template.admission_mode} - {template.fee_type} - {template.academic_year})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1324,43 +1472,51 @@ const AdminDashboard = () => {
                 )}
                 
                 {currentStudent ? (
-                  <div className="space-y-2">
-                    <Label>Individual Fee Components</Label>
-                    <div className="space-y-3">
+                  <div className="space-y-4">
+                    <Label>Custom Fee Amounts</Label>
+                    <div className="max-h-60 overflow-y-auto border rounded-lg p-4 space-y-3">
                       {feeComponentsData?.map((component) => (
-                        <div key={component.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div>
+                        <div key={component.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                          <div className="flex-1">
                             <span className="font-medium">{component.name}</span>
-                            <span className="text-sm text-muted-foreground ml-2">(Default: ₹{component.amount.toLocaleString()})</span>
+                            <p className="text-sm text-muted-foreground">Default: ₹{component.amount.toLocaleString()}</p>
                           </div>
-                          <Input
-                            type="number"
-                            placeholder="Custom amount"
-                            className="w-32"
-                            onChange={(e) => {
-                              const amount = Number(e.target.value);
-                              const overrides = JSON.parse(feeAssignmentForm.overrides || '{}');
-                              if (amount > 0) {
-                                overrides[component.name] = amount;
-                              } else {
-                                delete overrides[component.name];
-                              }
-                              setFeeAssignmentForm({
-                                ...feeAssignmentForm,
-                                overrides: JSON.stringify(overrides)
-                              });
-                            }}
-                          />
+                          <div className="flex items-center space-x-2">
+                            <Input
+                              type="number"
+                              placeholder="Custom amount"
+                              className="w-32"
+                              min="0"
+                              step="0.01"
+                              onChange={(e) => {
+                                const amount = Number(e.target.value);
+                                const overrides = JSON.parse(feeAssignmentForm.overrides || '{}');
+                                if (amount > 0) {
+                                  overrides[component.name] = amount;
+                                } else {
+                                  delete overrides[component.name];
+                                }
+                                setFeeAssignmentForm({
+                                  ...feeAssignmentForm,
+                                  overrides: JSON.stringify(overrides)
+                                });
+                              }}
+                            />
+                            <span className="text-sm text-muted-foreground">₹</span>
+                          </div>
                         </div>
                       ))}
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Enter custom amounts for each fee component. Leave empty to use default amounts.
-                    </p>
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Set custom amounts for each fee component. Leave empty to use default amounts from the selected template.
+                      </AlertDescription>
+                    </Alert>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Label htmlFor="assign-overrides">Overrides (JSON)</Label>
+                    <Label htmlFor="assign-overrides">Fee Adjustments (Advanced)</Label>
                     <Textarea
                       id="assign-overrides"
                       placeholder="{}" 
@@ -1745,6 +1901,260 @@ const AdminDashboard = () => {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Bulk Assignment Tab */}
+          <TabsContent value="bulk-assignment" className="mt-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Bulk Assignment Stats */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl font-bold">Assignment Statistics</CardTitle>
+                  <CardDescription>
+                    Overview of students and available templates for bulk assignment
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingBulkStats ? (
+                    <div className="flex justify-center items-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                      <span className="ml-2">Loading statistics...</span>
+                    </div>
+                  ) : bulkAssignmentStats?.bulk_assignment_stats ? (
+                    <div className="space-y-4">
+                      {bulkAssignmentStats.bulk_assignment_stats.map((stat, index) => (
+                        <div key={index} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-semibold">{stat.admission_mode} - {stat.department}</h3>
+                            <Badge variant="outline">{stat.total_students} students</Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Assigned:</span>
+                              <div className="font-medium text-green-600">{stat.assigned_students}</div>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Unassigned:</span>
+                              <div className="font-medium text-red-600">{stat.unassigned_students}</div>
+                            </div>
+                          </div>
+                          <div className="mt-2">
+                            <span className="text-sm text-muted-foreground">Available Templates:</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {stat.available_templates.map((template) => (
+                                <Badge key={template.id} variant="secondary" className="text-xs">
+                                  {template.name} (₹{template.total_amount.toLocaleString()})
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-center py-8">No statistics available</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Bulk Assignment Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl font-bold">Manual Bulk Assignment</CardTitle>
+                  <CardDescription>
+                    Assign fees to students based on admission mode and department
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleBulkAssignment} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="admission_mode">Admission Mode</Label>
+                      <Select
+                        value={bulkAssignmentForm.admission_mode}
+                        onValueChange={(value) => setBulkAssignmentForm({ ...bulkAssignmentForm, admission_mode: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select admission mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="regular">Regular</SelectItem>
+                          <SelectItem value="lateral">Lateral Entry</SelectItem>
+                          <SelectItem value="management">Management Quota</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="department">Department</Label>
+                      <Select
+                        value={bulkAssignmentForm.department}
+                        onValueChange={(value) => setBulkAssignmentForm({ ...bulkAssignmentForm, department: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CSE">Computer Science</SelectItem>
+                          <SelectItem value="ECE">Electronics</SelectItem>
+                          <SelectItem value="MECH">Mechanical</SelectItem>
+                          <SelectItem value="CIVIL">Civil</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="template_id">Fee Template</Label>
+                      <Select
+                        value={bulkAssignmentForm.template_id.toString()}
+                        onValueChange={(value) => setBulkAssignmentForm({ ...bulkAssignmentForm, template_id: parseInt(value) })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {feeTemplatesData?.map((template) => (
+                            <SelectItem key={template.id} value={template.id.toString()}>
+                              {template.name} - ₹{template.components.reduce((sum, comp) => sum + comp.amount_override || comp.component.amount, 0).toLocaleString()}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="academic_year">Academic Year (Optional)</Label>
+                      <Input
+                        id="academic_year"
+                        value={bulkAssignmentForm.academic_year}
+                        onChange={(e) => setBulkAssignmentForm({ ...bulkAssignmentForm, academic_year: e.target.value })}
+                        placeholder="2024-25"
+                      />
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="dry_run"
+                        checked={bulkAssignmentForm.dry_run}
+                        onChange={(e) => setBulkAssignmentForm({ ...bulkAssignmentForm, dry_run: e.target.checked })}
+                        className="rounded"
+                      />
+                      <Label htmlFor="dry_run">Dry Run (Preview only)</Label>
+                    </div>
+
+                    <Button 
+                      type="submit" 
+                      className="w-full"
+                      disabled={bulkAssignFeesMutation.isPending}
+                    >
+                      {bulkAssignFeesMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {bulkAssignmentForm.dry_run ? 'Preview Assignment' : 'Execute Bulk Assignment'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* Auto Assignment Form */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-xl font-bold">Automatic Assignment</CardTitle>
+                  <CardDescription>
+                    Automatically assign fees based on predefined rules and templates
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleAutoAssignment} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Admission Modes</Label>
+                        <div className="space-y-2">
+                          {['regular', 'lateral', 'management'].map((mode) => (
+                            <div key={mode} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`auto-${mode}`}
+                                checked={autoAssignmentForm.admission_modes.includes(mode)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setAutoAssignmentForm({
+                                      ...autoAssignmentForm,
+                                      admission_modes: [...autoAssignmentForm.admission_modes, mode]
+                                    });
+                                  } else {
+                                    setAutoAssignmentForm({
+                                      ...autoAssignmentForm,
+                                      admission_modes: autoAssignmentForm.admission_modes.filter(m => m !== mode)
+                                    });
+                                  }
+                                }}
+                              />
+                              <Label htmlFor={`auto-${mode}`} className="capitalize">{mode}</Label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Departments (Optional)</Label>
+                        <div className="space-y-2">
+                          {['CSE', 'ECE', 'MECH', 'CIVIL'].map((dept) => (
+                            <div key={dept} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`dept-${dept}`}
+                                checked={autoAssignmentForm.departments?.includes(dept) || false}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setAutoAssignmentForm({
+                                      ...autoAssignmentForm,
+                                      departments: [...(autoAssignmentForm.departments || []), dept]
+                                    });
+                                  } else {
+                                    setAutoAssignmentForm({
+                                      ...autoAssignmentForm,
+                                      departments: autoAssignmentForm.departments?.filter(d => d !== dept) || []
+                                    });
+                                  }
+                                }}
+                              />
+                              <Label htmlFor={`dept-${dept}`}>{dept}</Label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="auto_academic_year">Academic Year (Optional)</Label>
+                      <Input
+                        id="auto_academic_year"
+                        value={autoAssignmentForm.academic_year}
+                        onChange={(e) => setAutoAssignmentForm({ ...autoAssignmentForm, academic_year: e.target.value })}
+                        placeholder="2024-25"
+                      />
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="auto_dry_run"
+                        checked={autoAssignmentForm.dry_run}
+                        onChange={(e) => setAutoAssignmentForm({ ...autoAssignmentForm, dry_run: e.target.checked })}
+                        className="rounded"
+                      />
+                      <Label htmlFor="auto_dry_run">Dry Run (Preview only)</Label>
+                    </div>
+
+                    <Button 
+                      type="submit" 
+                      className="w-full"
+                      disabled={autoAssignFeesMutation.isPending}
+                    >
+                      {autoAssignFeesMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {autoAssignmentForm.dry_run ? 'Preview Auto Assignment' : 'Execute Auto Assignment'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
     </div>
