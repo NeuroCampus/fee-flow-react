@@ -50,6 +50,17 @@ interface OfflinePaymentForm {
   transaction_id?: string;
 }
 
+interface StudentForm {
+  email: string;
+  password: string;
+  name: string;
+  usn: string;
+  dept: string;
+  semester: number;
+  admission_mode: string;
+  status: string;
+}
+
 // Individual Fee Row Component
 const IndividualFeeRow: React.FC<{
   student: StudentProfile;
@@ -135,13 +146,14 @@ const AdminDashboard = () => {
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [currentStudent, setCurrentStudent] = useState<StudentProfile | null>(null);
-  const [studentForm, setStudentForm] = useState({
+  const [studentForm, setStudentForm] = useState<StudentForm>({
     email: '',
     password: '',
     name: '',
     usn: '',
     dept: '',
     semester: 1,
+    admission_mode: '',
     status: 'active',
   });
 
@@ -270,8 +282,9 @@ const AdminDashboard = () => {
         name: '',
         usn: '',
         dept: '',
-        semester: 1,
-        status: 'active',
+  semester: 1,
+  admission_mode: '',
+  status: 'active',
       });
     },
     onError: (error: any) => {
@@ -602,24 +615,26 @@ const AdminDashboard = () => {
       name: '',
       usn: '',
       dept: '',
-      semester: 1,
-      status: 'active',
+  semester: 1,
+  admission_mode: '',
+  status: 'active',
     });
     setIsStudentDialogOpen(true);
   };
 
   const handleEditStudent = (student: StudentProfile) => {
     setCurrentStudent(student);
-    setStudentForm({ ...student, email: "", password: "" }); // Email/password not editable here
+  setStudentForm({ ...student, email: "", password: "", admission_mode: student.admission_mode || '' } as Partial<StudentForm> as StudentForm); // Email/password not editable here
     setIsStudentDialogOpen(true);
   };
 
   const handleSubmitStudentForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (currentStudent) {
+  const updateData: Partial<StudentForm> = { name: studentForm.name, dept: studentForm.dept, semester: studentForm.semester, admission_mode: studentForm.admission_mode, status: studentForm.status };
       updateStudentMutation.mutate({
         id: currentStudent.id,
-        data: { name: studentForm.name, dept: studentForm.dept, semester: studentForm.semester, status: studentForm.status },
+        data: updateData,
       });
     } else {
       addStudentMutation.mutate(studentForm);
@@ -887,16 +902,17 @@ const AdminDashboard = () => {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>USN</TableHead>
+                        <TableHead>Admission Mode</TableHead>
                       <TableHead>Department</TableHead>
                       <TableHead>Semester</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoadingStudents ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center">
+                        <TableCell colSpan={7} className="text-center">
                           <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading Students...
                         </TableCell>
                       </TableRow>
@@ -905,6 +921,7 @@ const AdminDashboard = () => {
                         <TableRow key={student.id}>
                           <TableCell>{student.name}</TableCell>
                           <TableCell>{student.usn}</TableCell>
+                          <TableCell>{student.admission_mode || '-'}</TableCell>
                           <TableCell>{student.dept}</TableCell>
                           <TableCell>{student.semester}</TableCell>
                           <TableCell>{student.status}</TableCell>
@@ -929,7 +946,7 @@ const AdminDashboard = () => {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center">
+                            <TableCell colSpan={7} className="text-center">
                           No students found.
                         </TableCell>
                       </TableRow>
@@ -942,7 +959,7 @@ const AdminDashboard = () => {
               
           {/* Add/Edit Student Dialog */}
           <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{currentStudent ? "Edit Student" : "Add Student"}</DialogTitle>
                 <DialogDescription>
@@ -1002,6 +1019,26 @@ const AdminDashboard = () => {
                     onChange={(e) => setStudentForm({ ...studentForm, dept: e.target.value })}
                     required
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="admission_mode">Admission Mode</Label>
+                  <Select
+                    value={studentForm.admission_mode}
+                    onValueChange={(value) => setStudentForm({ ...studentForm, admission_mode: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select admission mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kcet">KCET</SelectItem>
+                      <SelectItem value="comedk">COMED-K</SelectItem>
+                      <SelectItem value="management">Management</SelectItem>
+                      <SelectItem value="jee">JEE</SelectItem>
+                      <SelectItem value="diploma">Diploma</SelectItem>
+                      <SelectItem value="lateral">Lateral</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="semester">Semester</Label>
@@ -1109,7 +1146,7 @@ const AdminDashboard = () => {
 
           {/* Add/Edit Fee Component Dialog */}
           <Dialog open={isFeeComponentDialogOpen} onOpenChange={setIsFeeComponentDialogOpen}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{currentFeeComponent ? "Edit Fee Component" : "Add Fee Component"}</DialogTitle>
                 <DialogDescription>
@@ -1222,7 +1259,7 @@ const AdminDashboard = () => {
 
           {/* Add/Edit Fee Template Dialog */}
           <Dialog open={isFeeTemplateDialogOpen} onOpenChange={setIsFeeTemplateDialogOpen}>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{currentFeeTemplate ? "Edit Fee Template" : "Create Fee Template"}</DialogTitle>
                 <DialogDescription>
@@ -1411,140 +1448,7 @@ const AdminDashboard = () => {
                 </CardContent>
               </Card>
 
-          {/* Add/Edit Fee Assignment Dialog */}
-          <Dialog open={isFeeAssignmentDialogOpen} onOpenChange={setIsFeeAssignmentDialogOpen}>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>
-                  {currentFeeAssignment ? "Edit Fee Assignment" : 
-                   currentStudent ? "Assign Individual Fees to Student" : "Assign Fee Template to Student"}
-                </DialogTitle>
-                <DialogDescription>
-                  {currentFeeAssignment
-                    ? "Edit the fee assignment details."
-                    : currentStudent
-                    ? "Set custom fee amounts for individual components for this student."
-                    : "Select a student and a fee template to assign fees."}
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmitFeeAssignmentForm} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="assign-student">Student</Label>
-                  <Select
-                    value={String(feeAssignmentForm.student)}
-                    onValueChange={(value) => setFeeAssignmentForm({ ...feeAssignmentForm, student: Number(value) })}
-                    disabled={!!currentFeeAssignment || !!currentStudent} // Disable when editing or individual assignment
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a student" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {studentsData?.students.map((student) => (
-                        <SelectItem key={student.id} value={String(student.id)}>
-                          {student.name} ({student.usn})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {!currentStudent && (
-                  <div className="space-y-2">
-                    <Label htmlFor="assign-template">Fee Template</Label>
-                    <Select
-                      value={String(feeAssignmentForm.template)}
-                      onValueChange={(value) => setFeeAssignmentForm({ ...feeAssignmentForm, template: Number(value) })}
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a fee template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.isArray(feeTemplatesData) && feeTemplatesData.map((template) => (
-                          <SelectItem key={template.id} value={String(template.id)}>
-                            {template.name} ({template.admission_mode} - {template.fee_type} - {template.academic_year})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                
-                {currentStudent ? (
-                  <div className="space-y-4">
-                    <Label>Custom Fee Amounts</Label>
-                    <div className="max-h-60 overflow-y-auto border rounded-lg p-4 space-y-3">
-                      {feeComponentsData?.map((component) => (
-                        <div key={component.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                          <div className="flex-1">
-                            <span className="font-medium">{component.name}</span>
-                            <p className="text-sm text-muted-foreground">Default: ₹{component.amount.toLocaleString()}</p>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Input
-                              type="number"
-                              placeholder="Custom amount"
-                              className="w-32"
-                              min="0"
-                              step="0.01"
-                              onChange={(e) => {
-                                const amount = Number(e.target.value);
-                                const overrides = JSON.parse(feeAssignmentForm.overrides || '{}');
-                                if (amount > 0) {
-                                  overrides[component.name] = amount;
-                                } else {
-                                  delete overrides[component.name];
-                                }
-                                setFeeAssignmentForm({
-                                  ...feeAssignmentForm,
-                                  overrides: JSON.stringify(overrides)
-                                });
-                              }}
-                            />
-                            <span className="text-sm text-muted-foreground">₹</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Set custom amounts for each fee component. Leave empty to use default amounts from the selected template.
-                      </AlertDescription>
-                    </Alert>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="assign-overrides">Fee Adjustments (Advanced)</Label>
-                    <Textarea
-                      id="assign-overrides"
-                      placeholder="{}" 
-                      value={feeAssignmentForm.overrides}
-                      onChange={(e) => setFeeAssignmentForm({ ...feeAssignmentForm, overrides: e.target.value })}
-                      className="min-h-[100px]"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Enter a JSON object for component overrides. E.g., &lbrace;"1": 5000, "3": 2000&rbrace;
-                    </p>
-                  </div>
-                )}
-                
-                <DialogFooter>
-                  <Button
-                    type="submit"
-                    disabled={addFeeAssignmentMutation.isPending || updateFeeAssignmentMutation.isPending}
-                  >
-                    {(addFeeAssignmentMutation.isPending || updateFeeAssignmentMutation.isPending) && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    {currentFeeAssignment ? "Save Changes" : 
-                     currentStudent ? "Assign Individual Fees" : "Assign Fee"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          
           </TabsContent>
 
         {/* Individual Fees Tab */}
@@ -1738,7 +1642,7 @@ const AdminDashboard = () => {
 
           {/* Add Offline Payment Dialog */}
           <Dialog open={isOfflinePaymentDialogOpen} onOpenChange={setIsOfflinePaymentDialogOpen}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add Offline Payment</DialogTitle>
                 <DialogDescription>Manually record a payment received offline.</DialogDescription>
@@ -2157,6 +2061,154 @@ const AdminDashboard = () => {
             </div>
           </TabsContent>
         </Tabs>
+        {/* Add/Edit Fee Assignment Dialog (moved out of its tab so it can open from any tab) */}
+        <Dialog open={isFeeAssignmentDialogOpen} onOpenChange={setIsFeeAssignmentDialogOpen}>
+          <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {currentFeeAssignment ? "Edit Fee Assignment" : 
+                 currentStudent ? "Assign Individual Fees to Student" : "Assign Fee Template to Student"}
+              </DialogTitle>
+              <DialogDescription>
+                {currentFeeAssignment
+                  ? "Edit the fee assignment details."
+                  : currentStudent
+                  ? "Set custom fee amounts for individual components for this student."
+                  : "Select a student and a fee template to assign fees."}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmitFeeAssignmentForm} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="assign-student">Student</Label>
+                <Select
+                  value={String(feeAssignmentForm.student)}
+                  onValueChange={(value) => setFeeAssignmentForm({ ...feeAssignmentForm, student: Number(value) })}
+                  disabled={!!currentFeeAssignment || !!currentStudent} // Disable when editing or individual assignment
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a student" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {studentsData?.students.map((student) => (
+                      <SelectItem key={student.id} value={String(student.id)}>
+                        {student.name} ({student.usn})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {!currentStudent && (
+                <div className="space-y-2">
+                  <Label htmlFor="assign-template">Fee Template</Label>
+                  <Select
+                    value={String(feeAssignmentForm.template)}
+                    onValueChange={(value) => setFeeAssignmentForm({ ...feeAssignmentForm, template: Number(value) })}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a fee template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.isArray(feeTemplatesData) && feeTemplatesData.map((template) => (
+                        <SelectItem key={template.id} value={String(template.id)}>
+                          {template.name} ({template.admission_mode} - {template.fee_type} - {template.academic_year})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {currentStudent ? (
+                <div className="space-y-4">
+                  <Label>Custom Fee Amounts</Label>
+                  <div className="max-h-60 overflow-y-auto border rounded-lg p-4 space-y-3">
+                    {feeComponentsData?.map((component) => (
+                      <div key={component.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex-1">
+                          <span className="font-medium">{component.name}</span>
+                          <p className="text-sm text-muted-foreground">Default: ₹{component.amount.toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {(() => {
+                            const parsedOverrides = (() => {
+                              try {
+                                return JSON.parse(feeAssignmentForm.overrides || '{}');
+                              } catch {
+                                return {} as Record<string, number | string>;
+                              }
+                            })();
+                            const currentVal = parsedOverrides[component.name] ?? '';
+                            return (
+                              <Input
+                                type="number"
+                                placeholder="Custom amount"
+                                className="w-32"
+                                min="0"
+                                step="0.01"
+                                value={currentVal === '' ? '' : String(currentVal)}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const overridesCopy: Record<string, number | string> = { ...parsedOverrides };
+                                  if (val.trim() === '') {
+                                    delete overridesCopy[component.name];
+                                  } else {
+                                    const n = Number(val);
+                                    overridesCopy[component.name] = Number.isNaN(n) ? val : n;
+                                  }
+                                  setFeeAssignmentForm({
+                                    ...feeAssignmentForm,
+                                    overrides: JSON.stringify(overridesCopy),
+                                  });
+                                }}
+                              />
+                            );
+                          })()}
+                          <span className="text-sm text-muted-foreground">₹</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Set custom amounts for each fee component. Leave empty to use default amounts from the selected template.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="assign-overrides">Fee Adjustments (Advanced)</Label>
+                  <Textarea
+                    id="assign-overrides"
+                    placeholder="{}" 
+                    value={feeAssignmentForm.overrides}
+                    onChange={(e) => setFeeAssignmentForm({ ...feeAssignmentForm, overrides: e.target.value })}
+                    className="min-h-[100px]"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Enter a JSON object for component overrides. E.g., &lbrace;"1": 5000, "3": 2000&rbrace;
+                  </p>
+                </div>
+              )}
+              
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  disabled={addFeeAssignmentMutation.isPending || updateFeeAssignmentMutation.isPending}
+                >
+                  {(addFeeAssignmentMutation.isPending || updateFeeAssignmentMutation.isPending) && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {currentFeeAssignment ? "Save Changes" : 
+                   currentStudent ? "Assign Individual Fees" : "Assign Fee"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
     </div>
   );
 };

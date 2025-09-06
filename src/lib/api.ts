@@ -41,6 +41,9 @@ interface StudentProfile {
   semester: number;
   status: string;
   user: number; // User ID
+  admission_mode?: string;
+  email?: string;
+  password?: string;
 }
 
 interface FeeComponent {
