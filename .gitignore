@@ -1,6 +1,7 @@
 # Logs
 logs/*.log
 !logs/
+stripe.log
 
 node_modules
 dist

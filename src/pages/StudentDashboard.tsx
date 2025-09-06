@@ -18,6 +18,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useNavigate } from 'react-router-dom';
 
 // Initialize Stripe with error handling
 const stripePromise = (() => {
@@ -30,11 +31,12 @@ const stripePromise = (() => {
 })();
 
 const StudentDashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout  } = useAuth();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const navigate = useNavigate();
 
   // Component selection states
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
@@ -54,17 +56,19 @@ const StudentDashboard: React.FC = () => {
     enabled: !!user && user.role === 'student',
   });
 
-  const { data: notificationsData, isLoading: isNotificationsLoading, error: notificationsError } = useQuery({
-    queryKey: ['studentNotifications'],
-    queryFn: studentAPI.getNotifications,
-    enabled: !!user && user.role === 'student',
-  });
 
   const { data: receiptsData, isLoading: isReceiptsLoading, error: receiptsError } = useQuery({
     queryKey: ['studentReceipts'],
     queryFn: studentAPI.getReceipts,
     enabled: !!user && user.role === 'student',
   });
+
+
+   const handleLogout = () => {
+    logout(); // clear tokens/sessions
+    queryClient.clear(); // clear react-query cache
+    navigate('/login'); // redirect to login page
+   };
 
   // Component selection query
   const { data: invoiceComponents, isLoading: isComponentsLoading } = useQuery({
@@ -138,20 +142,6 @@ const StudentDashboard: React.FC = () => {
     },
   });
 
-  const markNotificationReadMutation = useMutation({
-    mutationFn: (notificationId: number) => studentAPI.markNotificationRead(notificationId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['studentNotifications'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Mark Read Failed",
-        description: error.response?.data?.error || "Failed to mark notification as read.",
-        variant: "destructive",
-      });
-    },
-  });
-
   // Component-based payment mutation
   const createComponentPaymentMutation = useMutation({
     mutationFn: ({ invoiceId, data }: { invoiceId: number; data: ComponentPaymentRequest }) => 
@@ -188,7 +178,7 @@ const StudentDashboard: React.FC = () => {
     },
   });
 
-  if (isDashboardLoading || isPaymentsLoading || isNotificationsLoading || isReceiptsLoading) {
+  if (isDashboardLoading || isPaymentsLoading|| isReceiptsLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="text-center">
@@ -199,12 +189,12 @@ const StudentDashboard: React.FC = () => {
     );
   }
 
-  if (dashboardError || paymentsError || notificationsError || receiptsError) {
+  if (dashboardError || paymentsError|| receiptsError) {
     return (
       <div className="container mx-auto p-6">
         <div className="text-center text-red-500">
           <h2 className="text-xl font-semibold mb-2">Error loading data</h2>
-          <p>{(dashboardError || paymentsError || notificationsError || receiptsError as any)?.message || "An unexpected error occurred"}</p>
+          <p>{(dashboardError || paymentsError || receiptsError as any)?.message || "An unexpected error occurred"}</p>
         </div>
       </div>
     );
@@ -212,10 +202,8 @@ const StudentDashboard: React.FC = () => {
 
   const student = dashboardData?.student;
   const payments = paymentsData?.payments || [];
-  const notifications = notificationsData?.notifications || [];
   const receipts = receiptsData?.receipts || [];
 
-  const unreadNotificationsCount = notifications.filter((notif: any) => !notif.is_read).length;
 
   const handleUpdate = async () => {
     updateProfileMutation.mutate({ name, email });
@@ -252,10 +240,8 @@ const StudentDashboard: React.FC = () => {
       });
     }
   };
-
-  const handleMarkAsRead = (notificationId: number) => {
-    markNotificationReadMutation.mutate(notificationId);
-  };
+  
+  
 
   // Component selection handlers
   const handleOpenComponentDialog = (invoiceId: number) => {
@@ -339,11 +325,16 @@ const StudentDashboard: React.FC = () => {
       </Badge>
     );
   };
-
+      
   return (
     <div className="container mx-auto p-6 bg-background min-h-screen">
-      <h1 className="text-3xl font-bold text-foreground mb-6">Student Dashboard</h1>
-      
+    <div className="flex justify-between items-center mb-6">
+  <h1 className="text-3xl font-bold text-foreground">Student Dashboard</h1>
+  <Button variant="destructive" onClick={handleLogout}>
+    Logout
+  </Button>
+</div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Student Profile Card */}
         <Card className="col-span-1 md:col-span-2 lg:col-span-1">
@@ -403,6 +394,7 @@ const StudentDashboard: React.FC = () => {
           </CardContent>
         </Card>
 
+
         {/* Fee Overview Card */}
         <Card>
           <CardHeader>
@@ -439,7 +431,7 @@ const StudentDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Pay Now Button */}
+                 {/* Pay Now Button */}
                 {dashboardData.fee_overview.balance_amount > 0 && (
                   <Button 
                     className="w-full"
@@ -627,56 +619,6 @@ const StudentDashboard: React.FC = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* Notifications Card */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-3 space-y-0">
-            <CardTitle className="text-xl font-semibold flex items-center gap-2">
-              <Bell className="h-5 w-5" />
-              Notifications
-            </CardTitle>
-            {unreadNotificationsCount > 0 && (
-              <Badge variant="secondary" className="bg-primary text-primary-foreground">
-                {unreadNotificationsCount} new
-              </Badge>
-            )}
-          </CardHeader>
-          <CardContent>
-            {notifications.length > 0 ? (
-              <div className="space-y-4">
-                {notifications.map((notification: any) => (
-                  <div 
-                    key={notification.id} 
-                    className={`flex items-start gap-3 p-3 border rounded-lg 
-                      ${notification.is_read ? 'bg-muted/30 text-muted-foreground' : 'bg-card text-foreground font-medium'}`}
-                  >
-                    <Bell className="h-5 w-5 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm">{notification.message}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-                      </p>
-                    </div>
-                    {!notification.is_read && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleMarkAsRead(notification.id)}
-                        className="flex-shrink-0"
-                        disabled={markNotificationReadMutation.isPending}
-                      >
-                        <MailOpen className="h-4 w-4" />
-                        <span className="sr-only">Mark as read</span>
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">No new notifications.</p>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Component Selection Dialog */}
@@ -784,7 +726,7 @@ const StudentDashboard: React.FC = () => {
         </DialogContent>
       </Dialog>
     </div>
-  );
+  )
 };
 
 export default StudentDashboard;
