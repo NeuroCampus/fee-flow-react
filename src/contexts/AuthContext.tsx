@@ -1,5 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { authAPI } from '@/lib/api';
 
 interface User {
@@ -70,11 +72,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const navigate = useNavigate();
+
   const logout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setUser(null);
-    setAccessToken(null);
+    // perform an async logout with best-effort backend call, then clear local state/storage and navigate
+    (async () => {
+      try {
+        await authAPI.logout();
+      } catch (e) {
+        // ignore network errors — proceed to clear local session
+        console.debug('Backend logout failed or unavailable', e);
+      }
+
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      setUser(null);
+      setAccessToken(null);
+
+      // Clear any axios default Authorization header
+      try {
+        delete (axios.defaults.headers.common as any).Authorization;
+      } catch (e) {
+        // ignore
+      }
+
+      // Redirect to login page (replace history)
+      try {
+        navigate('/login', { replace: true });
+      } catch (e) {
+        // Fallback to full reload if react-router isn't available for some reason
+        window.location.href = '/login';
+      }
+    })();
   };
 
   return (

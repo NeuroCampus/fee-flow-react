@@ -4,10 +4,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import StudentDashboard from './StudentDashboard';
 import AdminDashboard from './AdminDashboard';
 import HODDashboard from './HODDashboard';
+import { Button } from '@/components/ui/button';
+import { LogOut } from 'lucide-react';
 
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   if (!user) {
     return null;
@@ -18,6 +20,14 @@ const Dashboard = () => {
 
   return (
     <div>
+      <header className="flex items-center justify-end gap-4 p-4 border-b bg-background">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => logout()} className="flex items-center gap-2">
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Logout</span>
+          </Button>
+        </div>
+      </header>
       
       
       {user.role === 'student' && <StudentDashboard />}
