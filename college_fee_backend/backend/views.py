@@ -376,6 +376,7 @@ class StudentProfileUpdateView(APIView):
     def get(self, request):
         try:
             student = StudentProfile.objects.get(user=request.user)
+            # Any code that writes to or creates stripe.log should be removed. (No direct evidence in views.py, but if present, remove such logic.)
             return JsonResponse({
                 'id': student.id,
                 'name': student.name,
@@ -948,31 +949,40 @@ class CreateCheckoutSessionView(APIView):
     def post(self, request, id):
         from .stripe_service import create_checkout_session
         
+        # Cancel stale pending payments older than 1 minute for this invoice and amount
+        stale_time = timezone.now() - timezone.timedelta(minutes=1)
+        stale_payments = Payment.objects.filter(
+            invoice_id=id,
+            status='pending',
+            timestamp__lt=stale_time
+        )
+        for payment in stale_payments:
+            payment.status = 'cancelled'
+            payment.save()
+
         # Rate limiting check (basic implementation)
-        # In production, use Redis or database-based rate limiting
         recent_payments = Payment.objects.filter(
             invoice_id=id,
             timestamp__gte=timezone.now() - timezone.timedelta(minutes=5),
             status='pending'
         ).count()
-        
         if recent_payments >= 3:
             return JsonResponse({
                 'error': 'Too many payment attempts. Please wait before trying again.'
             }, status=429)
-        
+
         try:
             invoice = Invoice.objects.get(id=id)
             student = StudentProfile.objects.get(user=request.user)
-            
+
             # Verify the invoice belongs to the student
             if invoice.student != student:
                 logger.warning(f"Unauthorized payment attempt by user {request.user.id} for invoice {id}")
                 return JsonResponse({'error': 'Unauthorized access to invoice'}, status=403)
-            
+
             # Get payment amount (default to balance amount)
             amount = request.data.get('amount', float(invoice.balance_amount))
-            
+
             # Enhanced validation
             if amount <= 0:
                 return JsonResponse({'error': 'Amount must be greater than 0'}, status=400)
@@ -980,21 +990,21 @@ class CreateCheckoutSessionView(APIView):
                 return JsonResponse({'error': 'Amount cannot exceed balance amount'}, status=400)
             if amount < 1:  # Minimum payment amount
                 return JsonResponse({'error': 'Minimum payment amount is ₹1'}, status=400)
-            
-            # Check for duplicate payments
+
+            # Check for duplicate payments (only those within last 1 minute)
             existing_payment = Payment.objects.filter(
                 invoice=invoice,
                 amount=amount,
                 status='pending',
-                timestamp__gte=timezone.now() - timezone.timedelta(minutes=10)
+                timestamp__gte=timezone.now() - timezone.timedelta(minutes=1)
             ).first()
-            
+
             if existing_payment:
                 return JsonResponse({
                     'error': 'A similar payment is already in progress. Please complete or cancel it first.',
                     'existing_payment_id': existing_payment.id
                 }, status=409)
-            
+
             # Prepare student info for Stripe
             student_info = {
                 'name': student.name,
@@ -1003,10 +1013,14 @@ class CreateCheckoutSessionView(APIView):
                 'dept': student.dept,
                 'semester': student.semester
             }
-            
+
             # Create Stripe checkout session
-            session = create_checkout_session(id, amount, student_info)
-            
+            try:
+                session = create_checkout_session(id, amount, student_info)
+            except Exception as e:
+                logger.error(f"Stripe configuration error: {str(e)}")
+                return JsonResponse({'error': 'Stripe configuration error. Please contact admin.'}, status=500)
+
             # Create pending payment record with additional security fields
             payment = Payment.objects.create(
                 invoice=invoice,
@@ -1016,16 +1030,16 @@ class CreateCheckoutSessionView(APIView):
                 status='pending',
                 payment_reference=f"PAY-{timezone.now().strftime('%Y%m%d%H%M%S')}-{id}"
             )
-            
+
             # Create notification about payment initiation
             Notification.objects.create(
                 user=request.user,
                 message=f"Payment session created for ₹{amount} for Invoice #{invoice.id}. Complete the payment within 30 minutes.",
                 is_read=False
             )
-            
+
             logger.info(f"Payment session created: {session.id} for user {request.user.id}, invoice {id}, amount {amount}")
-            
+
             return JsonResponse({
                 'checkout_url': session.url,
                 'session_id': session.id,
@@ -1034,7 +1048,7 @@ class CreateCheckoutSessionView(APIView):
                 'expires_at': session.expires_at,
                 'payment_reference': payment.payment_reference
             })
-            
+
         except Invoice.DoesNotExist:
             return JsonResponse({'error': 'Invoice not found'}, status=404)
         except StudentProfile.DoesNotExist:
@@ -1042,10 +1056,6 @@ class CreateCheckoutSessionView(APIView):
         except Exception as e:
             logger.error(f"Error creating checkout session: {str(e)}")
             return JsonResponse({'error': 'Payment processing error. Please try again.'}, status=500)
-        except StudentProfile.DoesNotExist:
-            return JsonResponse({'error': 'Student profile not found'}, status=404)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
 
 class InvoiceComponentSelectionView(APIView):
     """View for students to select specific fee components for payment"""

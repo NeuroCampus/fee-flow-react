@@ -327,17 +327,17 @@ const StudentDashboard: React.FC = () => {
   };
       
   return (
-    <div className="container mx-auto p-6 bg-background min-h-screen">
-    <div className="flex justify-between items-center mb-6">
-  <h1 className="text-3xl font-bold text-foreground">Student Dashboard</h1>
-  <Button variant="destructive" onClick={handleLogout}>
-    Logout
-  </Button>
-</div>
+    <div className="container mx-auto px-2 py-4 sm:px-4 md:px-6 bg-background min-h-screen">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 sm:gap-0">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Student Dashboard</h1>
+        <Button variant="destructive" onClick={handleLogout}>
+          Logout
+        </Button>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* Student Profile Card */}
-        <Card className="col-span-1 md:col-span-2 lg:col-span-1">
+        <Card className="col-span-1">
           <CardHeader>
             <CardTitle className="text-xl font-semibold flex items-center gap-2">
               <User className="h-5 w-5" />
@@ -573,8 +573,8 @@ const StudentDashboard: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Payment History Card */}
-        <Card className="lg:col-span-3">
+  {/* Payment History Card */}
+  <Card className="lg:col-span-3 overflow-x-auto">
           <CardHeader>
             <CardTitle className="text-xl font-semibold flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
@@ -583,7 +583,8 @@ const StudentDashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             {payments.length > 0 ? (
-              <Table>
+              <div className="w-full overflow-x-auto">
+                <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Payment ID</TableHead>
@@ -613,7 +614,8 @@ const StudentDashboard: React.FC = () => {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+                </Table>
+              </div>
             ) : (
               <p className="text-muted-foreground">No payment history found.</p>
             )}
@@ -623,7 +625,7 @@ const StudentDashboard: React.FC = () => {
 
       {/* Component Selection Dialog */}
       <Dialog open={isComponentDialogOpen} onOpenChange={setIsComponentDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-md sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Select Fee Components to Pay</DialogTitle>
             <DialogDescription>

@@ -165,17 +165,13 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
         },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs', 'stripe.log'),
-        },
     },
     'root': {
         'handlers': ['console'],
     },
     'loggers': {
         'backend.stripe_service': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
@@ -218,27 +214,3 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
-# Logging configuration
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs', 'stripe.log'),
-        },
-    },
-    'root': {
-        'handlers': ['console'],
-    },
-    'loggers': {
-        'backend.stripe_service': {
-            'handlers': ['file', 'console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-    },
-}
