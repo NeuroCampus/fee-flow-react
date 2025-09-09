@@ -208,8 +208,8 @@ const AdminDashboard = () => {
     admission_mode: '',
     department: '',
     template_id: 0,
-    academic_year: '',
-    dry_run: true,
+  academic_year: '',
+  dry_run: false,
   });
   const [autoAssignmentForm, setAutoAssignmentForm] = useState({
     admission_modes: [] as string[],
@@ -1881,9 +1881,13 @@ const AdminDashboard = () => {
                           <SelectValue placeholder="Select admission mode" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="regular">Regular</SelectItem>
-                          <SelectItem value="lateral">Lateral Entry</SelectItem>
-                          <SelectItem value="management">Management Quota</SelectItem>
+                          <SelectItem value="kcet">KCET</SelectItem>
+                          <SelectItem value="comedk">COMED-K</SelectItem>
+                          <SelectItem value="management">Management</SelectItem>
+                          <SelectItem value="jee">JEE</SelectItem>
+                          <SelectItem value="diploma">Diploma</SelectItem>
+                          <SelectItem value="lateral">Lateral</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1926,24 +1930,14 @@ const AdminDashboard = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="academic_year">Academic Year (Optional)</Label>
+                      <Label htmlFor="academic_year">Academic Year</Label>
                       <Input
                         id="academic_year"
                         value={bulkAssignmentForm.academic_year}
                         onChange={(e) => setBulkAssignmentForm({ ...bulkAssignmentForm, academic_year: e.target.value })}
                         placeholder="2024-25"
+                        required
                       />
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="dry_run"
-                        checked={bulkAssignmentForm.dry_run}
-                        onChange={(e) => setBulkAssignmentForm({ ...bulkAssignmentForm, dry_run: e.target.checked })}
-                        className="rounded"
-                      />
-                      <Label htmlFor="dry_run">Dry Run (Preview only)</Label>
                     </div>
 
                     <Button 
@@ -1952,116 +1946,15 @@ const AdminDashboard = () => {
                       disabled={bulkAssignFeesMutation.isPending}
                     >
                       {bulkAssignFeesMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {bulkAssignmentForm.dry_run ? 'Preview Assignment' : 'Execute Bulk Assignment'}
+                      Execute Bulk Assignment
                     </Button>
                   </form>
                 </CardContent>
               </Card>
 
-              {/* Auto Assignment Form */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-xl font-bold">Automatic Assignment</CardTitle>
-                  <CardDescription>
-                    Automatically assign fees based on predefined rules and templates
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleAutoAssignment} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Admission Modes</Label>
-                        <div className="space-y-2">
-                          {['regular', 'lateral', 'management'].map((mode) => (
-                            <div key={mode} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`auto-${mode}`}
-                                checked={autoAssignmentForm.admission_modes.includes(mode)}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setAutoAssignmentForm({
-                                      ...autoAssignmentForm,
-                                      admission_modes: [...autoAssignmentForm.admission_modes, mode]
-                                    });
-                                  } else {
-                                    setAutoAssignmentForm({
-                                      ...autoAssignmentForm,
-                                      admission_modes: autoAssignmentForm.admission_modes.filter(m => m !== mode)
-                                    });
-                                  }
-                                }}
-                              />
-                              <Label htmlFor={`auto-${mode}`} className="capitalize">{mode}</Label>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Departments (Optional)</Label>
-                        <div className="space-y-2">
-                          {['CSE', 'ECE', 'MECH', 'CIVIL'].map((dept) => (
-                            <div key={dept} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`dept-${dept}`}
-                                checked={autoAssignmentForm.departments?.includes(dept) || false}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setAutoAssignmentForm({
-                                      ...autoAssignmentForm,
-                                      departments: [...(autoAssignmentForm.departments || []), dept]
-                                    });
-                                  } else {
-                                    setAutoAssignmentForm({
-                                      ...autoAssignmentForm,
-                                      departments: autoAssignmentForm.departments?.filter(d => d !== dept) || []
-                                    });
-                                  }
-                                }}
-                              />
-                              <Label htmlFor={`dept-${dept}`}>{dept}</Label>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="auto_academic_year">Academic Year (Optional)</Label>
-                      <Input
-                        id="auto_academic_year"
-                        value={autoAssignmentForm.academic_year}
-                        onChange={(e) => setAutoAssignmentForm({ ...autoAssignmentForm, academic_year: e.target.value })}
-                        placeholder="2024-25"
-                      />
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="auto_dry_run"
-                        checked={autoAssignmentForm.dry_run}
-                        onChange={(e) => setAutoAssignmentForm({ ...autoAssignmentForm, dry_run: e.target.checked })}
-                        className="rounded"
-                      />
-                      <Label htmlFor="auto_dry_run">Dry Run (Preview only)</Label>
-                    </div>
-
-                    <Button 
-                      type="submit" 
-                      className="w-full"
-                      disabled={autoAssignFeesMutation.isPending}
-                    >
-                      {autoAssignFeesMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {autoAssignmentForm.dry_run ? 'Preview Auto Assignment' : 'Execute Auto Assignment'}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
             </div>
           </TabsContent>
         </Tabs>
-        {/* Add/Edit Fee Assignment Dialog (moved out of its tab so it can open from any tab) */}
         <Dialog open={isFeeAssignmentDialogOpen} onOpenChange={setIsFeeAssignmentDialogOpen}>
           <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
             <DialogHeader>
