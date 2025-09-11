@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -233,6 +233,16 @@ const AdminDashboard = () => {
     queryKey: ["feeTemplates"],
     queryFn: adminAPI.getFeeTemplates
   });
+
+  // Build a dynamic list of departments from the students data so selects show all departments
+  const departmentsList = useMemo(() => {
+    if (!studentsData || !Array.isArray(studentsData.students)) return ['CSE', 'ECE', 'MECH', 'CIVIL'];
+    const set = new Set<string>();
+    studentsData.students.forEach((s) => {
+      if (s.dept && typeof s.dept === 'string') set.add(s.dept);
+    });
+    return Array.from(set).sort();
+  }, [studentsData]);
 
   const { data: feeAssignmentsData, isLoading: isLoadingFeeAssignments } = useQuery({
     queryKey: ["feeAssignments"],
@@ -724,12 +734,14 @@ const AdminDashboard = () => {
   // Handlers for Fee Assignments
   const handleAddFeeAssignment = () => {
     setCurrentFeeAssignment(null);
+    setCurrentStudent(null);
     setFeeAssignmentForm({ student: "", template: "", overrides: "{}" });
     setIsFeeAssignmentDialogOpen(true);
   };
 
   const handleEditFeeAssignment = (assignment: FeeAssignment) => {
     setCurrentFeeAssignment(assignment);
+    setCurrentStudent(null);
     setFeeAssignmentForm({
       student: assignment.student,
       template: assignment.template,
@@ -855,9 +867,46 @@ const AdminDashboard = () => {
   };
 
   // Handlers for Bulk Assignment
-  const handleBulkAssignment = (e: React.FormEvent) => {
+  const handleBulkAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
-    bulkAssignFeesMutation.mutate(bulkAssignmentForm);
+    // Basic validation to avoid sending incomplete payloads
+    if (!bulkAssignmentForm.admission_mode) {
+      toast({ title: 'Admission mode required', description: 'Please select an admission mode.', variant: 'destructive' });
+      return;
+    }
+    if (!bulkAssignmentForm.department) {
+      toast({ title: 'Department required', description: 'Please select a department.', variant: 'destructive' });
+      return;
+    }
+    if (!bulkAssignmentForm.template_id || bulkAssignmentForm.template_id <= 0) {
+      toast({ title: 'Template required', description: 'Please select a fee template to assign.', variant: 'destructive' });
+      return;
+    }
+
+    const payload = {
+      admission_mode: bulkAssignmentForm.admission_mode,
+      department: bulkAssignmentForm.department,
+      template_id: Number(bulkAssignmentForm.template_id),
+      academic_year: bulkAssignmentForm.academic_year || undefined,
+      dry_run: Boolean(bulkAssignmentForm.dry_run),
+    };
+
+    try {
+      await bulkAssignFeesMutation.mutateAsync(payload);
+    } catch (error: unknown) {
+      console.error('Bulk assignment failed:', error);
+      let serverMsg: string | object = 'Unknown error from server';
+      if (error && typeof error === 'object') {
+        const errObj = error as Record<string, unknown>;
+        if (errObj.response && typeof errObj.response === 'object') {
+          const resp = errObj.response as Record<string, unknown>;
+          if (resp.data) serverMsg = resp.data as string | object;
+        } else if (typeof errObj.message === 'string') {
+          serverMsg = errObj.message;
+        }
+      }
+      toast({ title: 'Bulk Assignment Failed', description: typeof serverMsg === 'string' ? serverMsg : JSON.stringify(serverMsg), variant: 'destructive' });
+    }
   };
 
   const handleAutoAssignment = (e: React.FormEvent) => {
@@ -1729,10 +1778,9 @@ const AdminDashboard = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Departments</SelectItem>
-                    {/* Assuming departments are dynamic, hardcoding for now */}
-                    <SelectItem value="CSE">CSE</SelectItem>
-                    <SelectItem value="ECE">ECE</SelectItem>
-                    <SelectItem value="MECH">MECH</SelectItem>
+                    {departmentsList.map((dept) => (
+                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Select
@@ -1902,10 +1950,9 @@ const AdminDashboard = () => {
                           <SelectValue placeholder="Select department" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="CSE">Computer Science</SelectItem>
-                          <SelectItem value="ECE">Electronics</SelectItem>
-                          <SelectItem value="MECH">Mechanical</SelectItem>
-                          <SelectItem value="CIVIL">Civil</SelectItem>
+                          {departmentsList.map((dept) => (
+                            <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

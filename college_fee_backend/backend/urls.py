@@ -76,6 +76,9 @@ urlpatterns = [
     # HOD endpoints
     path('hod/students/', HODStudentsView.as_view(), name='hod-students'),
     path('hod/reports/', HODReportsView.as_view()),
+    # Bulk and Auto Assignment endpoints
+    path('bulk-fee-assignment/', AdminBulkFeeAssignmentView.as_view(), name='admin-bulk-fee-assignment'),
+    path('auto-assign-fees/', AdminAutoAssignFeesView.as_view(), name='admin-auto-assign-fees'),
     
     # Component-based payment views
     path('invoices/<int:invoice_id>/components/', InvoiceComponentSelectionView.as_view(), name='invoice-components'),
