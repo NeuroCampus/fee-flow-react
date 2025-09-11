@@ -2162,6 +2162,18 @@ class AdminBulkFeeAssignmentView(APIView):
         academic_year = data.get('academic_year', '2024-25')
         dry_run = data.get('dry_run', False)  # Default to False for safety
 
+        # Normalize and validate inputs
+        if template_id is not None:
+            try:
+                template_id = int(template_id)
+            except (ValueError, TypeError):
+                return JsonResponse({'error': 'Invalid template_id'}, status=400)
+
+        if admission_mode:
+            admission_mode = str(admission_mode).strip()
+        if department:
+            department = str(department).strip()
+
         if not all([admission_mode, department, template_id]):
             return JsonResponse({
                 'error': 'admission_mode, department, and template_id are required'
@@ -2172,14 +2184,24 @@ class AdminBulkFeeAssignmentView(APIView):
         except FeeTemplate.DoesNotExist:
             return JsonResponse({'error': 'Template not found'}, status=404)
 
-        # Get students matching criteria
-        students = StudentProfile.objects.filter(
-            admission_mode=admission_mode,
-            dept=department
-        ).exclude(
-            # Exclude students who already have an assignment for this academic year
-            feeassignment__academic_year=academic_year
-        )
+        # Get students matching criteria. Be permissive with department matching
+        students_qs = StudentProfile.objects.all()
+
+        if admission_mode:
+            students_qs = students_qs.filter(admission_mode__iexact=admission_mode)
+
+        # If department is provided and not 'all', try exact match first, then fallback to icontains
+        if department and department.lower() not in ['all', 'any', '']:
+            # Try exact match
+            exact_dept_qs = students_qs.filter(dept__iexact=department)
+            if exact_dept_qs.exists():
+                students_qs = exact_dept_qs
+            else:
+                # fallback to contains (handles codes like 'CSE' vs 'Computer Science')
+                students_qs = students_qs.filter(dept__icontains=department)
+
+        # Exclude students who already have an assignment for this academic year
+        students = students_qs.exclude(feeassignment__academic_year=academic_year)
 
         if not students:
             return JsonResponse({
