@@ -330,9 +330,6 @@ const StudentDashboard: React.FC = () => {
     <div className="container mx-auto px-2 py-4 sm:px-4 md:px-6 bg-background min-h-screen">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 sm:gap-0">
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Student Dashboard</h1>
-        <Button variant="destructive" onClick={handleLogout}>
-          Logout
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

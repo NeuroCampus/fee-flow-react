@@ -1,431 +1,173 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-    <meta charset="utf-8">
-    <title>Fee Receipt - {{ receipt.receipt_number }}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fee Receipt</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
             padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
         }
-        .receipt-container {
-            max-width: 850px;
-            margin: 0 auto;
+
+        .receipt {
+            max-width: 800px;
+            margin: auto;
+            border: 5px solid red;
+            padding: 20px;
             background-color: white;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            position: relative;
-            overflow: hidden;
         }
-        .receipt-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 8px;
-            background: linear-gradient(90deg, #667eea, #764ba2, #f093fb, #f5576c);
-        }
+
         .header {
             text-align: center;
-            border-bottom: 3px solid #667eea;
-            padding-bottom: 30px;
-            margin-bottom: 40px;
-            position: relative;
+            border-bottom: 2px solid #000080;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
         }
-        .college-name {
-            font-size: 28px;
-            font-weight: bold;
-            color: #2d3748;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+
+        .header img {
+            max-width: 100px;
+            display: block;
+            margin: auto;
         }
-        .college-address {
-            font-size: 16px;
-            color: #718096;
-            margin-bottom: 15px;
-            font-style: italic;
+
+        .header h2 {
+            color: #000080;
+            margin: 5px 0;
         }
-        .receipt-title {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 8px;
-            position: relative;
+
+        .header p {
+            color: #000080;
+            margin: 5px;
         }
-        .receipt-title::after {
-            content: '';
-            position: absolute;
-            bottom: -5px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 60px;
-            height: 3px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            border-radius: 2px;
+
+        .details {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
         }
-        .receipt-number {
-            font-size: 18px;
-            color: #4a5568;
-            font-weight: 600;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+
+        .details div {
+            width: 45%;
         }
-        .status-badge {
-            display: inline-block;
-            padding: 6px 16px;
-            background: linear-gradient(135deg, #48bb78, #38a169);
+
+        .details strong {
+            color: #000080;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        table th,
+        table td {
+            border: 1px solid #000080;
+            padding: 10px;
+            text-align: center;
+        }
+
+        table th {
+            background-color: #000080;
             color: white;
-            border-radius: 25px;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-left: 15px;
-            box-shadow: 0 4px 8px rgba(72, 187, 120, 0.3);
         }
-        .student-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 40px;
-            padding: 25px;
-            background: linear-gradient(135deg, #f7fafc, #edf2f7);
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-        }
-        .info-section {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        }
-        .info-section h3 {
-            margin: 0 0 15px 0;
-            color: #2d3748;
-            font-size: 18px;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 8px;
-            display: flex;
-            align-items: center;
-        }
-        .info-section h3::before {
-            content: '📋';
-            margin-right: 8px;
-        }
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-            padding: 8px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
-        .info-row:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-        }
-        .info-label {
-            font-weight: 600;
-            color: #4a5568;
-            font-size: 14px;
-        }
-        .info-value {
-            color: #2d3748;
-            font-weight: 500;
+
+        .total {
             text-align: right;
-        }
-        .payment-details {
-            margin-bottom: 40px;
-            padding: 30px;
-            background: linear-gradient(135deg, #ebf8ff, #bee3f8);
-            border-radius: 12px;
-            border-left: 5px solid #667eea;
-            position: relative;
-        }
-        .payment-details::before {
-            content: '💳';
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            font-size: 24px;
-        }
-        .payment-details h3 {
-            margin: 0 0 20px 0;
-            color: #2c5282;
-            font-size: 20px;
-            display: flex;
-            align-items: center;
-        }
-        .payment-details h3::before {
-            content: '💰';
-            margin-right: 10px;
-        }
-        .payment-summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-        .summary-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-        .summary-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-        }
-        .summary-label {
-            font-size: 12px;
-            color: #718096;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
-        }
-        .summary-value {
-            font-size: 20px;
             font-weight: bold;
-            color: #2d3748;
+            margin-bottom: 20px;
+            color: #000080;
         }
-        .summary-value.positive {
-            color: #48bb78;
-        }
-        .summary-value.negative {
-            color: #f56565;
-        }
-        .component-breakdown {
-            margin-top: 25px;
-        }
-        .component-breakdown h4 {
-            color: #2d3748;
-            margin-bottom: 15px;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-        }
-        .component-breakdown h4::before {
-            content: '📊';
-            margin-right: 8px;
-        }
-        .component-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        .component-item:last-child {
-            border-bottom: none;
-        }
-        .component-name {
-            font-weight: 500;
-            color: #4a5568;
-        }
-        .component-amount {
-            font-weight: 600;
-            color: #2d3748;
-        }
-        .signature-section {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 40px;
-            margin-top: 50px;
-        }
-        .signature-box {
-            text-align: center;
-            padding: 20px;
-            background: #f8fafc;
-            border-radius: 10px;
-            border: 2px dashed #cbd5e0;
-        }
-        .signature-line {
-            border-top: 2px solid #4a5568;
-            margin: 30px 0 10px 0;
-            position: relative;
-        }
-        .signature-line::after {
-            content: '✍️';
-            position: absolute;
-            top: -15px;
-            right: 10px;
-            font-size: 16px;
-        }
-        .signature-label {
-            font-size: 14px;
-            color: #718096;
-            font-weight: 500;
-        }
+
         .footer {
-            text-align: center;
-            margin-top: 50px;
-            padding-top: 30px;
-            border-top: 2px solid #e2e8f0;
-            color: #718096;
-            font-size: 13px;
-            line-height: 1.6;
+            color: #000080;
+            font-size: 14px;
         }
-        .footer-note {
-            background: linear-gradient(135deg, #fef5e7, #fed7aa);
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 20px;
-            border-left: 4px solid #f6ad55;
-        }
-        .footer-note strong {
-            color: #c05621;
-        }
-        @media (max-width: 768px) {
-            .student-info {
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
-            .payment-summary {
-                grid-template-columns: 1fr;
-            }
-            .signature-section {
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
+
+        .footer .signatory {
+            float: right;
+            font-weight: bold;
         }
     </style>
 </head>
-        }
+
 <body>
-    <div class="receipt-container">
-        <!-- Header -->
+    <div class="receipt">
         <div class="header">
-            <div class="college-name">{{ college_name }}</div>
-            <div class="college-address">{{ college_address }}</div>
-            <div class="receipt-title">FEE RECEIPT</div>
-            <div class="receipt-number">Receipt No: {{ receipt.receipt_number }} <span class="status-badge">Paid</span></div>
+            <h2>AMC ENGINEERING COLLEGE</h2>
+            <p>Sponsored By : Paramahamsa Foundation Trust (R)</p>
+            <p>Bannerghatta Main Road,Bengaluru,Karnataka-560083.Ph: 9902044114</p>
         </div>
 
-        <!-- Student Information -->
-        <div class="student-info">
-            <div class="info-section">
-                <h3>Student Details</h3>
-                <div class="info-row">
-                    <span class="info-label">Name:</span>
-                    <span class="info-value">{{ student.name }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">USN:</span>
-                    <span class="info-value">{{ student.usn }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Department:</span>
-                    <span class="info-value">{{ student.dept }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Semester:</span>
-                    <span class="info-value">{{ student.semester }}</span>
-                </div>
+        <div class="details">
+            <div>
+                <p><strong>SL No:</strong> {{ receipt.receipt_number }}</p>
+                <p><strong>Name:</strong> {{ student.name }}</p>
+                <p><strong>Course:</strong> {{ student.course }}</p>
             </div>
-
-            <div class="info-section">
-                <h3>Receipt Details</h3>
-                <div class="info-row">
-                    <span class="info-label">Date:</span>
-                    <span class="info-value">{{ payment_date }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Transaction ID:</span>
-                    <span class="info-value">{{ transaction_id }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Invoice ID:</span>
-                    <span class="info-value">{{ invoice_id }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Payment Mode:</span>
-                    <span class="info-value">{{ payment.mode|title }}</span>
-                </div>
+            <div style="text-align: right;">
+                <p><strong>Date:</strong> {{ payment_date }}</p>
+                <p><strong>RegNo / USN:</strong> {{ student.usn }}</p>
+                <p><strong>Sem / Year:</strong> {{ student.semester }} / {{ student.year }}</p>
             </div>
         </div>
 
-        <!-- Payment Details -->
-        <div class="payment-details">
-            <h3>Payment Summary</h3>
-            <div class="payment-summary">
-                <div class="summary-card">
-                    <div class="summary-label">Payment Amount</div>
-                    <div class="summary-value positive">₹{{ payment.amount }}</div>
-                </div>
-                <div class="summary-card">
-                    <div class="summary-label">Total Fee</div>
-                    <div class="summary-value">₹{{ total_fee }}</div>
-                </div>
-                <div class="summary-card">
-                    <div class="summary-label">Total Paid</div>
-                    <div class="summary-value">₹{{ paid_amount }}</div>
-                </div>
-                <div class="summary-card">
-                    <div class="summary-label">Balance Amount</div>
-                    <div class="summary-value negative">₹{{ balance_amount }}</div>
-                </div>
-            </div>
+        <table style="width: 100%; border-collapse: collapse; border: 2px solid #000080; margin-top: 20px;">
+    <thead>
+        <tr style="background-color: #000080; color: white; text-align: center;">
+            <th style="padding: 10px; border: 1px solid #000080;">SL. No.</th>
+            <th style="padding: 10px; border: 1px solid #000080;">PARTICULARS</th>
+            <th style="padding: 10px; border: 1px solid #000080;">AMOUNT</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for component in components %}
+        <tr style="text-align: center;">
+            <td style="padding: 10px; border: 1px solid #000080;">{{ forloop.counter }}</td>
+            <td style="padding: 10px; border: 1px solid #000080;">{{ component.component_name }}</td>
+            <td style="padding: 10px; border: 1px solid #000080;">₹{{ component.component_amount }}</td>
+        </tr>
+        {% endfor %}
+        <tr style="text-align: center;">
+            <td style="padding: 10px; border: 1px solid #000080;"></td>
+            <td style="padding: 10px; border: 1px solid #000080;"><strong>TOTAL</strong></td>
+            <td style="padding: 10px; border: 1px solid #000080;"><strong>₹{{ payment.amount }}</strong></td>
+        </tr>
+    </tbody>
+</table>
 
-            <!-- Component Breakdown -->
-            <div class="component-breakdown">
-                <h4>Fee Component Breakdown</h4>
-                {% for component in invoice.components.all %}
-                <div class="component-item">
-                    <span class="component-name">{{ component.component_name }}</span>
-                    <span class="component-amount">₹{{ component.paid_amount }} / ₹{{ component.component_amount }}</span>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+<p style="margin-top: 15px; font-weight: normal; color: #000080; font-size: 12px;">
+    Rupees: INR {% if payment.amount_in_words %}{{ payment.amount_in_words }}{% else %}{{ payment.amount }}{% endif %} Only
+</p>
 
-        <!-- Signature Section -->
-        <div class="signature-section">
-            <div class="signature-box">
-                <div class="signature-line"></div>
-                <div class="signature-label">Student Signature</div>
-            </div>
-            <div class="signature-box">
-                <div class="signature-line"></div>
-                <div class="signature-label">Accounts Department</div>
-            </div>
-            <div class="signature-box">
-                <div class="signature-line"></div>
-                <div class="signature-label">Authorized Signatory</div>
-            </div>
-        </div>
 
-        <!-- Footer -->
+
+    <p><strong>Paid Amount:</strong> ₹{{ paid_amount }}</p>
+    <p><strong>Balance Amount:</strong> ₹{{ balance_amount }}</p>
+    
         <div class="footer">
-            <p><strong>This is a computer generated receipt.</strong> No physical signature required.</p>
-            <p>Generated on: {{ receipt.generated_at|date:"d-m-Y H:i:s" }}</p>
-            <p>For any queries, please contact the accounts department.</p>
-
-            <div class="footer-note">
-                <p><strong>Important:</strong> This receipt serves as proof of payment. Please keep it safe for future reference.</p>
-                <p>All payments are processed securely through our payment gateway.</p>
-            </div>
+            <p><strong>For AMC Engineering College</strong></p>
+            <p>Mode Of Payment : {{ payment.mode|title }}</p>
+            <p style="font-size: 12px;">Transaction ID : {{ payment.transaction_id }}</p>
+            <p>D.D. Subject to Realisation</p>
+            <p>Note: Fees once paid will not be refunded under any circumstances.</p>
+            <p class="signatory">Authorised Signatory</p>
         </div>
+
+        <p style="clear: both; margin-top: 50px; font-size: 12px; text-align: center;">
+            ***This is a computer generated fee receipt and does not require signature & stamp.
+        </p>
     </div>
 </body>
+
 </html>
+
+
+
+
+
+
+        
