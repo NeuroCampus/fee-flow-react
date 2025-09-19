@@ -11,7 +11,7 @@ from django.db.models import Sum, Q
 from datetime import datetime, date
 from django.template.loader import get_template
 from django.http import HttpResponse
-from xhtml2pdf import pisa
+from weasyprint import HTML
 from rest_framework import generics, status
 from rest_framework.response import Response
 from django.utils import timezone
@@ -482,12 +482,44 @@ class DownloadReceiptView(APIView):
                 return JsonResponse({'error': 'Invoice not found for this payment'}, status=404)
             student = invoice.student
 
+            # Build student dict with course field
+            # Safely get course and year, fallback to dept if course missing
+            course = getattr(student, 'course', None)
+            if not course:
+                course = getattr(student, 'dept', '')
+            year = getattr(student, 'year', None)
+            if not year:
+                year = getattr(student, 'semester', '')
+            student_dict = {
+                'name': getattr(student, 'name', ''),
+                'usn': getattr(student, 'usn', ''),
+                'semester': getattr(student, 'semester', ''),
+                'year': year,
+                'course': course,
+            }
+
             # Enhanced receipt template with more details
             template = get_template('receipt_template.html')
+            # Ensure amount_in_words is present
+            amount_in_words = getattr(payment, 'amount_in_words', None)
+            if not amount_in_words:
+                try:
+                    from num2words import num2words
+                    amount_in_words = num2words(payment.amount, to='currency', lang='en_IN').upper()
+                except Exception:
+                    amount_in_words = str(payment.amount)
+            payment_dict = payment
+            # If payment is a model, add amount_in_words as attribute
+            if hasattr(payment, '__dict__'):
+                payment.amount_in_words = amount_in_words
+            else:
+                payment_dict = dict(payment)
+                payment_dict['amount_in_words'] = amount_in_words
+
             context = {
-                'payment': payment,
+                'payment': payment_dict,
                 'invoice': invoice,
-                'student': student,
+                'student': student_dict,
                 'receipt': receipt,
                 'user': request.user,
                 'college_name': 'Your College Name',
@@ -499,19 +531,16 @@ class DownloadReceiptView(APIView):
                 'paid_amount': float(invoice.paid_amount),
                 'balance_amount': float(invoice.balance_amount)
             }
-            
-            html = template.render(context)
-            
+
+            html_content = template.render(context)
+
             # Save PDF to receipts folder if not already saved
             self.ensure_receipt_pdf_saved(receipt, context)
-            
-            # Return PDF for download
-            response = HttpResponse(content_type='application/pdf')
+
+            # Return PDF for download using WeasyPrint
+            pdf_file = HTML(string=html_content).write_pdf()
+            response = HttpResponse(pdf_file, content_type='application/pdf')
             response['Content-Disposition'] = f'attachment; filename="receipt_{receipt.receipt_number}.pdf"'
-            
-            pisa_status = pisa.CreatePDF(html, dest=response)
-            if pisa_status.err:
-                return HttpResponse('We had some errors <pre>' + html + '</pre>')
             return response
             
         except Payment.DoesNotExist:
@@ -525,28 +554,24 @@ class DownloadReceiptView(APIView):
             import os
             from django.conf import settings
             from django.template.loader import get_template
-            from xhtml2pdf import pisa
-            
+            from weasyprint import HTML
+
             # Create receipts folder if it doesn't exist
             receipts_dir = os.path.join(settings.BASE_DIR, 'receipts')
             os.makedirs(receipts_dir, exist_ok=True)
-            
+
             # Check if PDF already exists
             pdf_filename = f"receipt_{receipt.receipt_number}.pdf"
             pdf_path = os.path.join(receipts_dir, pdf_filename)
-            
+
             if not os.path.exists(pdf_path):
-                # Generate PDF content
                 template = get_template('receipt_template.html')
-                html = template.render(context)
-                
-                # Save PDF to file
-                with open(pdf_path, 'wb') as pdf_file:
-                    pisa_status = pisa.CreatePDF(html, dest=pdf_file)
-                    if pisa_status.err:
-                        print(f"Error creating PDF: {pisa_status.err}")
-                    else:
-                        print(f"Receipt PDF saved: {pdf_path}")
+                html_content = template.render(context)
+                pdf_file = HTML(string=html_content).write_pdf()
+                with open(pdf_path, 'wb') as f:
+                    f.write(pdf_file)
+        except Exception as e:
+            print(f"Error ensuring receipt PDF saved: {e}")
                         
         except Exception as e:
             print(f"Error ensuring receipt PDF saved: {e}")
