@@ -180,6 +180,20 @@ The system uses a comprehensive set of UI components built with Shadcn/ui:
 5. System updates payment records
 6. Receipt is generated automatically
 
+
+ ## WeasyPrint system dependencies (GTK and related libraries) required for PDF rendering on Windows. These are not installed by pip and must be added separately.
+
+To fix this on Windows:
+
+1. Download and install the GTK3 runtime:
+Go to: https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases
+2. Download the latest gtk3-runtime installer (e.g., gtk3-runtime-3.24.38-2022-12-27-tschoonj-installer.exe).
+Run the installer and follow the instructions.
+3. After installation, add the GTK bin folder (e.g., C:\Program Files\GTK3-Runtime Win64\bin) to your system PATH environment variable.
+4. Restart your terminal and try running your Django server again.
+
+
+
 ## 📊 Reporting & Analytics
 
 ### Admin Reports
