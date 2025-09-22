@@ -106,12 +106,12 @@
             <div>
                 <p><strong>SL No:</strong> {{ receipt.receipt_number }}</p>
                 <p><strong>Name:</strong> {{ student.name }}</p>
-                <p><strong>Course:</strong> {{ student.course }}</p>
+                <p><strong>Course:</strong> {{ student.dept }}</p>
             </div>
             <div style="text-align: right;">
                 <p><strong>Date:</strong> {{ payment_date }}</p>
                 <p><strong>RegNo / USN:</strong> {{ student.usn }}</p>
-                <p><strong>Sem / Year:</strong> {{ student.semester }} / {{ student.year }}</p>
+                <p><strong>Sem / Year:</strong> {{ student.semester }} / {{ student.batch }}</p>
             </div>
         </div>
 
@@ -140,7 +140,7 @@
 </table>
 
 <p style="margin-top: 15px; font-weight: normal; color: #000080; font-size: 12px;">
-    Rupees: INR {% if payment.amount_in_words %}{{ payment.amount_in_words }}{% else %}{{ payment.amount }}{% endif %} Only
+    Rupees: INR {% if amount_in_words %}{{ amount_in_words }}{% else %}{{ payment.amount }}{% endif %} Only
 </p>
 
 

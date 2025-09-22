@@ -217,8 +217,16 @@ const StudentDashboard: React.FC = () => {
   };
 
   const handleDownloadReceipt = async (paymentId: number) => {
+    if (!dashboardData?.student?.usn) {
+      toast({
+        title: "Error",
+        description: "Student information not available.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
-      const response = await studentAPI.getReceipt(paymentId);
+      const response = await studentAPI.downloadReceipt(dashboardData.student.usn, paymentId);
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -603,10 +611,12 @@ const StudentDashboard: React.FC = () => {
                       <TableCell>{getStatusBadge(payment.status)}</TableCell>
                       <TableCell>{new Date(payment.timestamp).toLocaleDateString()}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => handleDownloadReceipt(payment.id)}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Receipt
-                        </Button>
+                        {payment.status === 'success' && (
+                          <Button variant="outline" size="sm" onClick={() => handleDownloadReceipt(payment.id)}>
+                            <Download className="h-4 w-4 mr-2" />
+                            Receipt
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

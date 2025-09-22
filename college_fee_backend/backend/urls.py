@@ -14,8 +14,9 @@ from .views import (
     StudentNotificationsView, StudentMarkNotificationReadView, AdminReportsView,
     AdminCustomFeeStructureView, AdminStudentFeeProfileView, AdminStudentStatusDashboardView, AdminCollectionsReportView,
     StudentProfileEditView, StudentReceiptsView, AdminIndividualFeeAssignmentView, AdminStudentFeeBreakdownView,
-    AdminBulkFeeAssignmentView, AdminAutoAssignFeesView,
-    InvoiceComponentSelectionView, ComponentBasedPaymentView
+    AdminBulkFeeAssignmentView,
+    InvoiceComponentSelectionView, ComponentBasedPaymentView,
+    SyncStudentView, StudentFeesView, StudentCompleteFeeDataView
 )
 from django.http import JsonResponse
 
@@ -78,7 +79,6 @@ urlpatterns = [
     path('hod/reports/', HODReportsView.as_view()),
     # Bulk and Auto Assignment endpoints
     path('bulk-fee-assignment/', AdminBulkFeeAssignmentView.as_view(), name='admin-bulk-fee-assignment'),
-    path('auto-assign-fees/', AdminAutoAssignFeesView.as_view(), name='admin-auto-assign-fees'),
     
     # Component-based payment views
     path('invoices/<int:invoice_id>/components/', InvoiceComponentSelectionView.as_view(), name='invoice-components'),
@@ -89,6 +89,11 @@ urlpatterns = [
     path('payments/<str:session_id>/status/', PaymentStatusView.as_view(), name='payment-status'),
     path('payments/<int:payment_id>/refund/', RefundPaymentView.as_view(), name='refund-payment'),
     path('webhooks/stripe/', StripeWebhookView.as_view(), name='stripe-webhook'),
+    
+    # New Campus integration APIs
+    path('api/sync-student/', SyncStudentView.as_view(), name='sync-student'),
+    path('api/fees/<str:usn>/', StudentFeesView.as_view(), name='student-fees'),
+    path('api/student/complete-fee-data/<str:usn>/', StudentCompleteFeeDataView.as_view(), name='student-complete-fee-data'),
     
     # Django Admin - Put this last to prevent conflicts
     path('admin/', admin.site.urls),

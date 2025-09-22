@@ -1,0 +1,15 @@
+cd college_fee_backend
+
+activate the environment on mac - source venv/bin/activate
+on windows   venv/Scripts/activate
+
+python manage.py runserver 8001
+
+
+
+
+
+
+frontend in new terminal 
+
+npm run dev
