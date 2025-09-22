@@ -1,0 +1,12 @@
+Email: ritu@gmail.com                 Role: admin    Password: admin123
+Email: 1am22ci061@student.edu         Role: student  Password: student123
+Email: 1am22ci073@student.edu         Role: student  Password: student123
+Email: 1am22ci079@student.edu         Role: student  Password: student123
+Email: 1am22ci083@student.edu         Role: student  Password: student123
+Email: 1am22ci088@student.edu         Role: student  Password: student123
+Email: 1am22ci090@student.edu         Role: student  Password: student123
+Email: 1am22ci094@student.edu         Role: student  Password: student123
+Email: 1am22ci300@student.edu         Role: student  Password: student123
+Email: 1am22cv077@student.edu         Role: student  Password: student123
+Email: 1am22cv100@student.edu         Role: student  Password: student123
+Email: riteshnvisonex@gmail.com       Role: student  Password: student123

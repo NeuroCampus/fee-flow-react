@@ -75,6 +75,10 @@ class StudentProfile(models.Model):
          usn = models.CharField(max_length=50, unique=True, blank=True, null=True)
          dept = models.CharField(max_length=100)
          semester = models.IntegerField()
+         batch = models.CharField(max_length=50, blank=True, null=True)  # e.g., "2020–2024"
+         section = models.CharField(max_length=1, blank=True, null=True)  # e.g., "A"
+         date_of_admission = models.DateField(blank=True, null=True)
+         is_active = models.BooleanField(default=True)
          admission_mode = models.CharField(max_length=20, choices=ADMISSION_MODE_CHOICES, default='kcet')
          status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
 

@@ -93,7 +93,7 @@ npm run dev
 ### 4. Environment Configuration
 Create a `.env` file in the root directory:
 ```env
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8001
 VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key_here
 ```
 
@@ -377,7 +377,7 @@ source env/bin/activate
 python manage.py runserver
 ```
 
-The API will be available at: `http://localhost:8000`
+The API will be available at: `http://localhost:8001`
 
 ## 📚 API Documentation
 

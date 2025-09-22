@@ -53,7 +53,7 @@ const BackendStatus: React.FC = () => {
         {error && (
           <div className="text-sm text-red-600">
             <p>Error: {(error as any)?.message || 'Unknown error'}</p>
-            <p>Check if Django server is running on port 8000</p>
+            <p>Check if Django server is running on port 8001</p>
           </div>
         )}
         

@@ -1,4 +1,3 @@
-
 import stripe
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse
@@ -7,7 +6,7 @@ from django.contrib.auth import authenticate
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, F
 from datetime import datetime, date
 from django.template.loader import get_template
 from django.http import HttpResponse
@@ -318,7 +317,7 @@ class StudentInvoiceDetailView(APIView):
                 'paid_amount': float(invoice.paid_amount),
                 'balance_amount': float(invoice.balance_amount),
                 'status': invoice.status,
-                'due_date': invoice.due_date.isoformat() if invoice.due_date else None,
+                'due_date': invoice.due_date.isoformat() if inv.due_date else None,
                 'payments': [{
                     'id': p.id,
                     'amount': float(p.amount),
@@ -467,11 +466,17 @@ class StudentReceiptsView(APIView):
             return JsonResponse({'error': 'Student profile not found'}, status=404)
 
 class DownloadReceiptView(APIView):
-    permission_classes = [IsStudentUser]
+    permission_classes = [IsAuthenticated]  # Allow authenticated users (students and admins)
 
     def get(self, request, payment_id):
         try:
-            payment = Payment.objects.get(id=payment_id, invoice__student__user=request.user)
+            # Check if user is admin (can download any receipt) or student (can only download their own)
+            if request.user.role == 'admin':
+                payment = Payment.objects.get(id=payment_id)
+            else:
+                # Students can only download their own receipts
+                payment = Payment.objects.get(id=payment_id, invoice__student__user=request.user)
+            
             receipt = Receipt.objects.filter(payment=payment).first()
             
             if not receipt:
@@ -481,22 +486,6 @@ class DownloadReceiptView(APIView):
             if not invoice:
                 return JsonResponse({'error': 'Invoice not found for this payment'}, status=404)
             student = invoice.student
-
-            # Build student dict with course field
-            # Safely get course and year, fallback to dept if course missing
-            course = getattr(student, 'course', None)
-            if not course:
-                course = getattr(student, 'dept', '')
-            year = getattr(student, 'year', None)
-            if not year:
-                year = getattr(student, 'semester', '')
-            student_dict = {
-                'name': getattr(student, 'name', ''),
-                'usn': getattr(student, 'usn', ''),
-                'semester': getattr(student, 'semester', ''),
-                'year': year,
-                'course': course,
-            }
 
             # Enhanced receipt template with more details
             template = get_template('receipt_template.html')
@@ -508,18 +497,14 @@ class DownloadReceiptView(APIView):
                     amount_in_words = num2words(payment.amount, to='currency', lang='en_IN').upper()
                 except Exception:
                     amount_in_words = str(payment.amount)
-            payment_dict = payment
-            # If payment is a model, add amount_in_words as attribute
-            if hasattr(payment, '__dict__'):
-                payment.amount_in_words = amount_in_words
-            else:
-                payment_dict = dict(payment)
-                payment_dict['amount_in_words'] = amount_in_words
+            
+            # Add amount_in_words to payment object
+            payment.amount_in_words = amount_in_words
 
             context = {
-                'payment': payment_dict,
+                'payment': payment,
                 'invoice': invoice,
-                'student': student_dict,
+                'student': student,  # Pass the actual student object
                 'receipt': receipt,
                 'user': request.user,
                 'college_name': 'Your College Name',
@@ -529,7 +514,9 @@ class DownloadReceiptView(APIView):
                 'transaction_id': payment.transaction_id,
                 'total_fee': float(invoice.total_amount),
                 'paid_amount': float(invoice.paid_amount),
-                'balance_amount': float(invoice.balance_amount)
+                'balance_amount': float(invoice.balance_amount),
+                'components': invoice.components.all() if hasattr(invoice, 'components') else [],
+                'amount_in_words': amount_in_words
             }
 
             html_content = template.render(context)
@@ -565,16 +552,18 @@ class DownloadReceiptView(APIView):
             pdf_path = os.path.join(receipts_dir, pdf_filename)
 
             if not os.path.exists(pdf_path):
-                template = get_template('receipt_template.html')
-                html_content = template.render(context)
-                pdf_file = HTML(string=html_content).write_pdf()
-                with open(pdf_path, 'wb') as f:
-                    f.write(pdf_file)
+                print(f"PDF saving temporarily disabled due to library compatibility issues")
+                # TODO: Fix pydyf/WeasyPrint compatibility issue
+                # template = get_template('receipt_template.html')
+                # html_content = template.render(context)
+                # pdf_file = HTML(string=html_content).write_pdf()
+                # with open(pdf_path, 'wb') as f:
+                #     f.write(pdf_file)
+                # print(f"Receipt PDF saved: {pdf_path}")
         except Exception as e:
             print(f"Error ensuring receipt PDF saved: {e}")
-                        
-        except Exception as e:
-            print(f"Error ensuring receipt PDF saved: {e}")
+            import traceback
+            traceback.print_exc()
 
 # Admin views
 class AdminStudentsView(APIView):
@@ -1522,6 +1511,13 @@ class StripeWebhookView(APIView):
                 return
             
             # Generate receipt content
+            # Generate amount_in_words
+            try:
+                from num2words import num2words
+                amount_in_words = num2words(payment.amount, to='currency', lang='en_IN').upper()
+            except Exception:
+                amount_in_words = str(payment.amount)
+                
             receipt_data = {
                 'payment_id': payment.id,
                 'student_name': student.name,
@@ -1538,7 +1534,8 @@ class StripeWebhookView(APIView):
                 'balance_amount': float(invoice.balance_amount),
                 'receipt_number': f"RCPT-{payment.id:06d}",
                 'college_name': "Your College Name",
-                'college_address': "College Address, City, State - PIN"
+                'college_address': "College Address, City, State - PIN",
+                'amount_in_words': amount_in_words
             }
             
             # Create receipt record in database
@@ -1652,7 +1649,7 @@ class StripeWebhookView(APIView):
             import os
             from django.conf import settings
             from django.template.loader import get_template
-            from xhtml2pdf import pisa
+            from weasyprint import HTML
             
             # Create receipts folder if it doesn't exist
             receipts_dir = os.path.join(settings.BASE_DIR, 'receipts')
@@ -1674,21 +1671,22 @@ class StripeWebhookView(APIView):
                 'invoice_id': receipt_data['invoice_id'],
                 'total_fee': receipt_data['total_fee'],
                 'paid_amount': receipt_data['paid_amount'],
-                'balance_amount': receipt_data['balance_amount']
+                'balance_amount': receipt_data['balance_amount'],
+                'amount_in_words': receipt_data.get('amount_in_words', ''),
+                'components': receipt.payment.invoice.components.all() if hasattr(receipt.payment.invoice, 'components') else []
             }
             
             html = template.render(context)
             
-            # Save PDF to file
+            # Save PDF to file using WeasyPrint (same as download method)
             pdf_filename = f"receipt_{receipt.receipt_number}.pdf"
             pdf_path = os.path.join(receipts_dir, pdf_filename)
             
-            with open(pdf_path, 'wb') as pdf_file:
-                pisa_status = pisa.CreatePDF(html, dest=pdf_file)
-                if pisa_status.err:
-                    print(f"Error creating PDF: {pisa_status.err}")
-                else:
-                    print(f"Receipt PDF saved: {pdf_path}")
+            pdf_file = HTML(string=html).write_pdf()
+            with open(pdf_path, 'wb') as f:
+                f.write(pdf_file)
+                
+            print(f"Receipt PDF saved: {pdf_path}")
                     
         except Exception as e:
             print(f"Error saving receipt PDF: {e}")
@@ -2166,7 +2164,7 @@ class AdminBulkFeeAssignmentView(APIView):
                             'name': t.name,
                             'total_amount': float(t.total_amount),
                             'fee_type': t.fee_type
-                        } for t in matching_templates]
+                                               } for t in matching_templates]
                     })
 
         return JsonResponse({
@@ -2277,204 +2275,274 @@ class AdminBulkFeeAssignmentView(APIView):
 
         action = "simulated" if dry_run else "assigned"
         return JsonResponse({
-            'message': f'Successfully {action} fees to {assignments_created} students',
+            'message': f'{"Preview" if dry_run else "Executed"} bulk assignment',
             'assignments_created': assignments_created,
             'invoices_created': invoices_created,
-            'students_processed': len(students),
-            'dry_run': dry_run,
-            'template_used': {
-                'id': template.id,
-                'name': template.name,
-                'total_amount': float(template.total_amount),
-                'admission_mode': template.admission_mode,
-                'department': template.dept
-            }
-        })
-
-class AdminAutoAssignFeesView(APIView):
-    """Admin view for auto-assigning fee templates based on admission mode rules"""
-    permission_classes = [IsAdminUser]
-
-    def get(self, request):
-        """Get auto-assignment rules and preview"""
-        # Define default rules for admission modes
-        rules = {
-            'kcet': {'template_pattern': 'KCET', 'auto_assign': True},
-            'comedk': {'template_pattern': 'COMED-K', 'auto_assign': True},
-            'management': {'template_pattern': 'Management', 'auto_assign': False},  # Manual assignment
-            'jee': {'template_pattern': 'JEE', 'auto_assign': True},
-            'diploma': {'template_pattern': 'Diploma', 'auto_assign': True},
-            'lateral': {'template_pattern': 'Lateral', 'auto_assign': True},
-            'other': {'template_pattern': 'General', 'auto_assign': False}  # Manual assignment
-        }
-
-        # Get statistics for each admission mode and department
-        stats = []
-        departments = StudentProfile.objects.values_list('dept', flat=True).distinct()
-
-        for mode_code, rule in rules.items():
-            for dept in departments:
-                student_count = StudentProfile.objects.filter(
-                    admission_mode=mode_code, 
-                    dept=dept
-                ).count()
-                
-                if student_count > 0:
-                    assigned_count = FeeAssignment.objects.filter(
-                        student__admission_mode=mode_code,
-                        student__dept=dept
-                    ).count()
-
-                    # Find matching templates
-                    matching_templates = FeeTemplate.objects.filter(
-                        name__icontains=rule['template_pattern']
-                    ).filter(
-                        Q(dept=dept) | Q(dept__isnull=True) | Q(dept='')
-                    )
-
-                    stats.append({
-                        'admission_mode': mode_code,
-                        'department': dept,
-                        'rule': rule,
-                        'total_students': student_count,
-                        'assigned_students': assigned_count,
-                        'unassigned_students': student_count - assigned_count,
-                        'matching_templates': [{
-                            'id': t.id,
-                            'name': t.name,
-                            'total_amount': float(t.total_amount),
-                            'fee_type': t.fee_type
-                        } for t in matching_templates]
-                    })
-
-        return JsonResponse({
-            'auto_assignment_rules': rules,
-            'statistics': stats
-        })
-
-    def post(self, request):
-        """Execute auto-assignment for specified admission modes and departments"""
-        # Handle both form data and JSON data
-        if request.content_type == 'application/json':
-            data = request.data
-        else:
-            data = request.POST
-            
-        admission_modes = data.get('admission_modes', [])
-        departments = data.get('departments', [])
-        dry_run = data.get('dry_run', True)  # Default to dry run
-        academic_year = data.get('academic_year', '2024-25')
-
-        if not admission_modes:
-            return JsonResponse({
-                'error': 'admission_modes list is required'
-            }, status=400)
-
-        # Define rules
-        rules = {
-            'kcet': 'KCET',
-            'comedk': 'COMED-K',
-            'jee': 'JEE',
-            'diploma': 'Diploma',
-            'lateral': 'Lateral'
-        }
-
-        results = {}
-        total_assignments_created = 0
-        total_invoices_created = 0
-        admin_user = request.user
-
-        for mode in admission_modes:
-            if mode not in rules:
-                results[mode] = {'error': f'No rule defined for {mode}'}
-                continue
-
-            template_pattern = rules[mode]
-
-            # Get departments to process
-            depts_to_process = departments if departments else StudentProfile.objects.filter(
-                admission_mode=mode
-            ).values_list('dept', flat=True).distinct()
-
-            for dept in depts_to_process:
-                # Find students without assignments for this academic year
-                unassigned_students = StudentProfile.objects.filter(
-                    admission_mode=mode,
-                    dept=dept
-                ).exclude(
-                    feeassignment__academic_year=academic_year
-                )
-
-                if not unassigned_students:
-                    continue
-
-                # Find appropriate template
-                template = FeeTemplate.objects.filter(
-                    name__icontains=template_pattern
-                ).filter(
-                    Q(dept=dept) | Q(dept__isnull=True) | Q(dept='')
-                ).first()
-
-                if not template:
-                    results[f'{mode}_{dept}'] = {'error': f'No template found for {mode} in {dept}'}
-                    continue
-
-                assignments_created = 0
-                invoices_created = 0
-
-                if not dry_run:
-                    for student in unassigned_students:
-                        # Create assignment
-                        assignment = FeeAssignment.objects.create(
-                            student=student,
-                            template=template,
-                            assignment_type='auto',
-                            academic_year=academic_year,
-                            assigned_by=admin_user,
-                            is_active=True
-                        )
-
-                        # Create invoice
-                        invoice = Invoice.objects.create(
-                            student=student,
-                            assignment=assignment,
-                            invoice_type=template.fee_type,
-                            academic_year=academic_year,
-                            total_amount=template.total_amount,
-                            paid_amount=0,
-                            balance_amount=template.total_amount,
-                            due_date=date.today(),
-                            status='pending'
-                        )
-
-                        # Create invoice components
-                        for ft_component in template.feetemplatecomponent_set.all():
-                            InvoiceComponent.objects.create(
-                                invoice=invoice,
-                                component_name=ft_component.component.name,
-                                component_amount=ft_component.amount_override or ft_component.component.amount,
-                                paid_amount=0,
-                                balance_amount=ft_component.amount_override or ft_component.component.amount
-                            )
-
-                        assignments_created += 1
-                        invoices_created += 1
-
-                results[f'{mode}_{dept}'] = {
-                    'students_processed': len(unassigned_students),
-                    'assignments_created': assignments_created,
-                    'invoices_created': invoices_created,
-                    'template_used': template.name,
-                    'dry_run': dry_run
-                }
-
-                total_assignments_created += assignments_created
-                total_invoices_created += invoices_created
-
-        return JsonResponse({
-            'message': f'{"Preview" if dry_run else "Executed"} auto-assignment',
-            'total_assignments_created': total_assignments_created,
-            'total_invoices_created': total_invoices_created,
-            'results': results,
             'dry_run': dry_run
         })
+
+
+# New APIs for Campus integration
+
+@method_decorator(csrf_exempt, name='dispatch')
+class SyncStudentView(APIView):
+    permission_classes = []  # No auth for internal API
+
+    def post(self, request):
+        data = request.data
+        usn = data.get('usn')
+        if not usn:
+            return Response({'error': 'USN is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Try to get existing student
+        try:
+            student = StudentProfile.objects.get(usn=usn)
+            created = False
+        except StudentProfile.DoesNotExist:
+            # Create new student
+            email = f"{usn.lower()}@student.edu"
+            user = User.objects.create_user(
+                email=email,
+                password=None,  # No password for synced students
+                role='student'
+            )
+            student = StudentProfile.objects.create(
+                user=user,
+                usn=usn,
+                name=data.get('name', ''),
+                dept=data.get('branch', ''),  # branch maps to dept
+                semester=data.get('semester', 1),
+                batch=data.get('batch', ''),
+                section=data.get('section', ''),
+                date_of_admission=data.get('date_of_admission'),
+                is_active=data.get('is_active', True),
+            )
+            created = True
+
+        if not created:
+            # Update existing
+            student.name = data.get('name', student.name)
+            student.dept = data.get('branch', student.dept)
+            student.semester = data.get('semester', student.semester)
+            student.batch = data.get('batch', student.batch)
+            student.section = data.get('section', student.section)
+            student.date_of_admission = data.get('date_of_admission', student.date_of_admission)
+            student.is_active = data.get('is_active', student.is_active)
+            student.save()
+
+        return Response({'message': 'Student synced successfully', 'created': created}, status=status.HTTP_200_OK)
+
+
+class StudentFeesView(APIView):
+    permission_classes = []  # No auth for internal API
+
+    def get(self, request, usn):
+        try:
+            student = StudentProfile.objects.get(usn=usn)
+        except StudentProfile.DoesNotExist:
+            return Response({'error': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Calculate total fees: sum of all invoice amounts
+        total_fees = Invoice.objects.filter(student=student).aggregate(total=Sum('total_amount'))['total'] or 0
+
+        # Calculate amount paid: sum of all payment amounts
+        amount_paid = Payment.objects.filter(invoice__student=student).aggregate(total=Sum('amount'))['total'] or 0
+
+        # Remaining fees
+        remaining_fees = total_fees - amount_paid
+
+        # Due date: earliest due date from unpaid invoices
+        try:
+            # Get invoices that are not fully paid
+            unpaid_invoices = Invoice.objects.filter(
+                student=student
+            ).exclude(
+                # Exclude invoices where total paid >= total amount
+                id__in=Payment.objects.filter(
+                    invoice__student=student
+                ).values('invoice').annotate(
+                    total_paid=Sum('amount')
+                ).filter(
+                    total_paid__gte=F('invoice__total_amount')
+                ).values('invoice')
+            ).order_by('due_date')
+
+            due_date = unpaid_invoices.first().due_date if unpaid_invoices.exists() else None
+        except:
+            due_date = None
+
+        return Response({
+            'total_fees': total_fees,
+            'amount_paid': amount_paid,
+            'remaining_fees': remaining_fees,
+            'due_date': due_date,
+        }, status=status.HTTP_200_OK)
+
+
+class StudentCompleteFeeDataView(APIView):
+    permission_classes = []  # No auth for external API access
+
+    def get(self, request, usn):
+        try:
+            student = StudentProfile.objects.get(usn=usn)
+        except StudentProfile.DoesNotExist:
+            return Response({'error': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if receipt download is requested
+        download_receipt = request.GET.get('download_receipt')
+        if download_receipt:
+            try:
+                payment_id = int(download_receipt)
+                payment = Payment.objects.get(id=payment_id, invoice__student=student)
+                receipt = Receipt.objects.filter(payment=payment).first()
+                if not receipt:
+                    return Response({'error': 'Receipt not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+                invoice = payment.invoice
+                if not invoice:
+                    return Response({'error': 'Invoice not found for this payment'}, status=status.HTTP_404_NOT_FOUND)
+
+                # Enhanced receipt template with more details
+                template = get_template('receipt_template.html')
+                # Ensure amount_in_words is present
+                amount_in_words = getattr(payment, 'amount_in_words', None)
+                if not amount_in_words:
+                    try:
+                        from num2words import num2words
+                        amount_in_words = num2words(payment.amount, to='currency', lang='en_IN').upper()
+                    except Exception:
+                        amount_in_words = str(payment.amount)
+                
+                # Add amount_in_words to payment object
+                payment.amount_in_words = amount_in_words
+
+                context = {
+                    'payment': payment,
+                    'invoice': invoice,
+                    'student': student,  # Pass the actual student object
+                    'receipt': receipt,
+                    'user': student.user,
+                    'college_name': 'Your College Name',
+                    'college_address': 'College Address, City, State - PIN',
+                    'payment_date': payment.timestamp.strftime('%d-%b-%Y %H:%M'),
+                    'receipt_number': receipt.receipt_number,
+                    'transaction_id': payment.transaction_id,
+                    'total_fee': float(invoice.total_amount),
+                    'paid_amount': float(invoice.paid_amount),
+                    'balance_amount': float(invoice.balance_amount),
+                    'components': invoice.components.all() if hasattr(invoice, 'components') else [],
+                    'amount_in_words': amount_in_words
+                }
+
+                html_content = template.render(context)
+
+                # Return PDF for download using WeasyPrint
+                pdf_file = HTML(string=html_content).write_pdf()
+                response = HttpResponse(pdf_file, content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename="receipt_{receipt.receipt_number}.pdf"'
+                return response
+                
+            except Payment.DoesNotExist:
+                return Response({'error': 'Payment not found or does not belong to this student'}, status=status.HTTP_404_NOT_FOUND)
+            except ValueError:
+                return Response({'error': 'Invalid payment ID'}, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get all invoices for the student
+        invoices = Invoice.objects.filter(student=student).order_by('-id')
+        invoice_data = []
+        for inv in invoices:
+            invoice_data.append({
+                'id': inv.id,
+                'invoice_number': inv.invoice_number,
+                'semester': inv.semester,
+                'academic_year': inv.academic_year,
+                'total_amount': float(inv.total_amount),
+                'paid_amount': float(inv.paid_amount),
+                'balance_amount': float(inv.balance_amount),
+                'status': inv.status,
+                'due_date': inv.due_date.isoformat() if inv.due_date else None,
+                'created_at': inv.created_at.isoformat() if inv.created_at else None,
+                'invoice_type': inv.invoice_type,
+            })
+
+        # Get all payments for the student
+        payments = Payment.objects.filter(invoice__student=student).order_by('-timestamp')
+        payment_data = []
+        for pay in payments:
+            payment_data.append({
+                'id': pay.id,
+                'invoice_id': pay.invoice.id if pay.invoice else None,
+                'amount': float(pay.amount),
+                'mode': pay.mode,
+                'status': pay.status,
+                'timestamp': pay.timestamp.isoformat(),
+                'transaction_id': pay.transaction_id,
+                'payment_reference': getattr(pay, 'payment_reference', None),
+            })
+
+        # Get all receipts for the student
+        receipts = Receipt.objects.filter(payment__invoice__student=student).order_by('-generated_at')
+        receipt_data = []
+        for rec in receipts:
+            receipt_data.append({
+                'id': rec.id,
+                'receipt_number': rec.receipt_number,
+                'amount': float(rec.amount),
+                'payment_id': rec.payment.id,
+                'payment_date': rec.payment.timestamp.isoformat(),
+                'payment_mode': rec.payment.mode,
+                'transaction_id': rec.payment.transaction_id,
+                'invoice_id': rec.payment.invoice.id if rec.payment.invoice else None,
+                'semester': rec.payment.invoice.semester if rec.payment.invoice else None,
+                'generated_at': rec.generated_at.isoformat(),
+            })
+
+        # Calculate summary statistics
+        total_fees = sum(float(inv.total_amount) for inv in invoices)
+        amount_paid = sum(float(pay.amount) for pay in payments if pay.status == 'success')
+        remaining_fees = total_fees - amount_paid
+
+        # Get earliest due date from unpaid invoices
+        unpaid_invoices = [inv for inv in invoices if inv.balance_amount > 0]
+        due_date = None
+        if unpaid_invoices:
+            unpaid_invoices.sort(key=lambda x: x.due_date if x.due_date else date.max)
+            due_date = unpaid_invoices[0].due_date.isoformat() if unpaid_invoices[0].due_date else None
+
+        # Get custom fee structure if exists
+        custom_fees = CustomFeeStructure.objects.filter(student=student).first()
+        fee_breakdown = custom_fees.components if custom_fees else {}
+
+        return Response({
+            'student': {
+                'id': student.id,
+                'name': student.name,
+                'usn': student.usn,
+                'dept': student.dept,
+                'semester': student.semester,
+                'admission_mode': student.admission_mode,
+                'status': student.status,
+                'email': student.user.email if student.user else None,
+            },
+            'fee_summary': {
+                'total_fees': total_fees,
+                'amount_paid': amount_paid,
+                'remaining_fees': remaining_fees,
+                'due_date': due_date,
+                'payment_status': 'paid' if remaining_fees <= 0 else ('partial' if amount_paid > 0 else 'unpaid'),
+            },
+            'fee_breakdown': fee_breakdown,
+            'invoices': invoice_data,
+            'payments': payment_data,
+            'receipts': receipt_data,
+            'statistics': {
+                'total_invoices': len(invoices),
+                'total_payments': len(payments),
+                'total_receipts': len(receipts),
+                'successful_payments': len([p for p in payments if p.status == 'success']),
+                'pending_payments': len([p for p in payments if p.status == 'pending']),
+                'failed_payments': len([p for p in payments if p.status == 'failed']),
+            }
+        }, status=status.HTTP_200_OK)
